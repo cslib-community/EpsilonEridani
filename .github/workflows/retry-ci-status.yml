@@ -1,0 +1,26 @@
+name: Retry CI status publication
+
+# Replay retained terminal statuses only; never rerun the source build.
+on:
+  workflow_run:
+    workflows: [pr-build]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  publish:
+    uses: TauCetiProject/TauCetiTools/.github/workflows/retry-ci-status.yml@2fa9b421d1846bc281151b748553b0ba95d4c788
+    with:
+      tools_repository: TauCetiProject/TauCetiTools
+      tools_ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+      project_ref: ${{ github.workflow_sha }}
+    secrets:
+      CI_READ_APP_ID: ${{ secrets.CI_READ_APP_ID }}
+      CI_READ_APP_PRIVATE_KEY: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+      CI_STATUS_APP_ID: ${{ secrets.CI_STATUS_APP_ID }}
+      CI_STATUS_APP_PRIVATE_KEY: ${{ secrets.CI_STATUS_APP_PRIVATE_KEY }}
