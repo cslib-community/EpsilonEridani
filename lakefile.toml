@@ -3,9 +3,9 @@ defaultTargets = ["EpsilonEridani"]
 platformIndependent = true
 
 [[require]]
-name = "mathlib"
-git = "https://github.com/leanprover-community/mathlib4"
-rev = "master"
+name = "cslib"
+git = "https://github.com/leanprover/cslib"
+rev = "main"
 
 [[lean_lib]]
 name = "EpsilonEridani"
