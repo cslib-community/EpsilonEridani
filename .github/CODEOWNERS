@@ -1,0 +1,6 @@
+/tauceti.toml @SamuelSchlesinger
+/.github/ @SamuelSchlesinger
+/scripts/ @SamuelSchlesinger
+/lakefile.* @SamuelSchlesinger
+/lean-toolchain @SamuelSchlesinger
+/lake-manifest.json @SamuelSchlesinger

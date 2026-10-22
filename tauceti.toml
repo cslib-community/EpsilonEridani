@@ -1,0 +1,89 @@
+# Canonical, human-owned project configuration. No credentials belong here.
+schema_version = 1
+
+[project]
+name = "EpsilonEridani"
+branch = "main"
+codeowners = ["@SamuelSchlesinger"]
+
+[repositories]
+content = "cslib-community/EpsilonEridani"
+roadmap = "cslib-community/EpsilonEridaniRoadmap"
+review = "TauCetiProject/TauCetiReview"
+# Enable and create these repositories when choosing the corresponding extras.
+# data = "cslib-community/EpsilonEridaniData"
+# ci = "cslib-community/EpsilonEridaniCI"
+# claims = "cslib-community/EpsilonEridani-claims"
+
+[lean]
+roots = ["EpsilonEridani"]
+root_module = "empty"
+
+[roadmap]
+active_dir = "EpsilonEridaniRoadmap"
+completed_dir = "Completed"
+# Optional WIP roadmap authoring uses its own configuration, not this tauceti.toml.
+# authoring_conf_url = "https://raw.githubusercontent.com/cslib-community/EpsilonEridaniRoadmapJobs/main/tauceti-roadmap.toml"
+
+# Select full commit SHAs before installing the core workflows.
+# Discover a version with: gh api repos/TauCetiProject/TauCetiTools/commits/main --jq .sha
+[tools.tools]
+repo = "TauCetiProject/TauCetiTools"
+ref = "2fa9b421d1846bc281151b748553b0ba95d4c788"
+[tools.review]
+repo = "TauCetiProject/TauCetiReview"
+ref = "fc9a57c67bf375ff349abc15c91f7fdb3ad2d486"
+# [tools.progress]
+# repo = "TauCetiProject/TauCetiProgress"
+# ref = "FULL_COMMIT_SHA"
+# [tools.docgen]
+# repo = "leanprover/doc-gen4"
+# ref = "FULL_COMMIT_SHA_COMPATIBLE_WITH_YOUR_LEAN_TOOLCHAIN"
+
+[merge]
+backend = "github-direct"
+checks = ["build", "bump-guard", "scope"]
+
+[[upstreams]]
+repo = "leanprover-community/mathlib4"
+package = "mathlib"
+branch = "master"
+update = true
+overlap = true
+upstream_destination = true
+
+# Everything below is optional. Use doctor --no-extras to report only core setup.
+[features]
+archives = false
+ci_archive = false
+claims = false
+docs = false
+progress = false
+zulip = false
+fleet = false
+security_audit = false
+roadmap_authoring = false # WIP: TauCetiRoadmapWorker and a downstream-owned job board
+
+[services.github_state]
+mode = "off" # off | hosted | custom
+# url = "https://github-state.example.org"
+
+[services.bors]
+mode = "off" # hosted supplies Neon only; YOU operate the runtime
+deployment = "docker" # docker | cloudflare
+# url = "https://bors.example.org"
+# image = "ghcr.io/taucetiproject/bors-ng@sha256:SELECT_RELEASE_DIGEST"
+
+[services.cache]
+mode = "off"
+# name = "epsiloneridani-public"
+# artifact_url = "https://cache.example.org/artifacts"
+# revision_url = "https://cache.example.org/revisions"
+# artifact_write_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com/PROJECT-cache/artifacts"
+# revision_write_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com/PROJECT-cache/revisions"
+
+[publication]
+# docs_url = "https://cslib-community.github.io/EpsilonEridani/docs"
+# zulip_site = "https://leanprover.zulipchat.com"
+# zulip_channel = "Project channel"
+# zulip_topic = "Progress logs"

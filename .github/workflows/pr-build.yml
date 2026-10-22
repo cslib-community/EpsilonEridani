@@ -1,0 +1,44 @@
+name: pr-build
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  # The merge queue tests a batch (one or more PRs combined onto current main) before it lands. We
+  # build the COMBINED merge-group commit exactly as GitHub synthesized it and post the `build`
+  # status on it so the queue's required check is satisfied. A combined diff that reaches outside
+  # EpsilonEridani/ needs exact-revision human approval through bors; the trusted harness
+  # remains independent of that diff.
+  merge_group:
+    types: [checks_requested]
+  # Bors dispatches the exact staging SHA. repository_dispatch uses this trusted
+  # default-branch workflow definition, not a candidate's .github/ files. A human
+  # approval also requests ordinary PR CI; that dispatch carries no authority.
+  repository_dispatch:
+    types: [tauceti-bors-staging, tauceti-bors-pr-approved]
+  workflow_dispatch:
+    inputs:
+      pr: { description: "PR number to build", required: true, type: string }
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+  actions: read
+jobs:
+  validate:
+    uses: TauCetiProject/TauCetiTools/.github/workflows/pr-build.yml@2fa9b421d1846bc281151b748553b0ba95d4c788
+    with:
+      pr: ${{ inputs.pr || '' }}
+      tools_repository: TauCetiProject/TauCetiTools
+      tools_ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+      project_ref: ${{ github.workflow_sha }}
+      lean_root: EpsilonEridani
+      roadmap_dir: EpsilonEridaniRoadmap
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      FLEET_READ_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
+      LAKE_CACHE_KEY: ${{ secrets.LAKE_CACHE_KEY }}
+      CI_READ_APP_ID: ${{ secrets.CI_READ_APP_ID }}
+      CI_READ_APP_PRIVATE_KEY: ${{ secrets.CI_READ_APP_PRIVATE_KEY }}
+      CI_STATUS_APP_ID: ${{ secrets.CI_STATUS_APP_ID }}
+      CI_STATUS_APP_PRIVATE_KEY: ${{ secrets.CI_STATUS_APP_PRIVATE_KEY }}
