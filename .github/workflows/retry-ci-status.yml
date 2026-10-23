@@ -14,10 +14,10 @@ permissions:
 
 jobs:
   publish:
-    uses: TauCetiProject/TauCetiTools/.github/workflows/retry-ci-status.yml@2fa9b421d1846bc281151b748553b0ba95d4c788
+    uses: TauCetiProject/TauCetiTools/.github/workflows/retry-ci-status.yml@4b554aae4441ade012eaa869b2d0f4eae79176a5
     with:
       tools_repository: TauCetiProject/TauCetiTools
-      tools_ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+      tools_ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
       project_ref: ${{ github.workflow_sha }}
     secrets:
       CI_READ_APP_ID: ${{ secrets.CI_READ_APP_ID }}

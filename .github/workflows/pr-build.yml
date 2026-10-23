@@ -5,8 +5,8 @@ on:
   # The merge queue tests a batch (one or more PRs combined onto current main) before it lands. We
   # build the COMBINED merge-group commit exactly as GitHub synthesized it and post the `build`
   # status on it so the queue's required check is satisfied. A combined diff that reaches outside
-  # EpsilonEridani/ needs exact-revision human approval through bors; the trusted harness
-  # remains independent of that diff.
+  # EpsilonEridani/ stays scope-blocked with the merge queue; an administrator can instead
+  # admin-merge its PR. Bors setups use the existing exact-revision bors merge approval.
   merge_group:
     types: [checks_requested]
   # Bors dispatches the exact staging SHA. repository_dispatch uses this trusted
@@ -25,11 +25,11 @@ permissions:
   actions: read
 jobs:
   validate:
-    uses: TauCetiProject/TauCetiTools/.github/workflows/pr-build.yml@2fa9b421d1846bc281151b748553b0ba95d4c788
+    uses: TauCetiProject/TauCetiTools/.github/workflows/pr-build.yml@4b554aae4441ade012eaa869b2d0f4eae79176a5
     with:
       pr: ${{ inputs.pr || '' }}
       tools_repository: TauCetiProject/TauCetiTools
-      tools_ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+      tools_ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
       project_ref: ${{ github.workflow_sha }}
       lean_root: EpsilonEridani
       roadmap_dir: EpsilonEridaniRoadmap

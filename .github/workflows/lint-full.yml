@@ -26,6 +26,28 @@ env:
   MATHLIB_CACHE_DEBUG_USE_LEGACY: ${{ vars.MATHLIB_CACHE_DEBUG_USE_LEGACY }}
 
 jobs:
+  app-credentials:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check App settings for setup
+        id: check
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          ready=true
+          for name in APP_ID APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              ready=false
+              printf 'Missing %s. Finish App credential setup with tauceti-tools doctor.\n' "$name" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          printf 'ready=%s\n' "$ready" >> "$GITHUB_OUTPUT"
+
   lint:
     runs-on: ubuntu-latest
     outputs:
@@ -44,7 +66,7 @@ jobs:
           now="$(cat /proc/sys/vm/max_map_count)"
           echo "vm.max_map_count=$now"
           [ "$now" -ge "$target" ] || echo "::warning::vm.max_map_count is $now, below $target"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           # As in ci.yml: this job runs EpsilonEridani code, so keep GITHUB_TOKEN out of .git/config.
           persist-credentials: false
@@ -54,10 +76,10 @@ jobs:
           fetch-depth: 100
 
       - name: Prepare pinned shared tools
-        uses: TauCetiProject/TauCetiTools/.github/actions/setup@2fa9b421d1846bc281151b748553b0ba95d4c788
+        uses: TauCetiProject/TauCetiTools/.github/actions/setup@4b554aae4441ade012eaa869b2d0f4eae79176a5
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+          tools-ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
           project-directory: .
       - name: Import-boundary guard (EpsilonEridani/ and EpsilonEridani.lean ⊬ roadmap/review)
         run: |
@@ -207,8 +229,9 @@ jobs:
           fi
 
   repair:
-    needs: lint
-    if: ${{ needs.lint.outputs.outcome == 'violations' }}
+    needs: [app-credentials, lint]
+    if: >-
+      needs.app-credentials.outputs.ready == 'true' && (needs.lint.outputs.outcome == 'violations')
     runs-on: ubuntu-latest
     permissions: {}
     steps:

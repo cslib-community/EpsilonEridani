@@ -29,7 +29,7 @@ completed_dir = "Completed"
 # Discover a version with: gh api repos/TauCetiProject/TauCetiTools/commits/main --jq .sha
 [tools.tools]
 repo = "TauCetiProject/TauCetiTools"
-ref = "2fa9b421d1846bc281151b748553b0ba95d4c788"
+ref = "4b554aae4441ade012eaa869b2d0f4eae79176a5"
 [tools.review]
 repo = "TauCetiProject/TauCetiReview"
 ref = "fc9a57c67bf375ff349abc15c91f7fdb3ad2d486"
@@ -41,7 +41,7 @@ ref = "fc9a57c67bf375ff349abc15c91f7fdb3ad2d486"
 # ref = "FULL_COMMIT_SHA_COMPATIBLE_WITH_YOUR_LEAN_TOOLCHAIN"
 
 [merge]
-backend = "github-direct"
+backend = "github-queue"
 checks = ["build", "bump-guard", "scope"]
 
 [[upstreams]]

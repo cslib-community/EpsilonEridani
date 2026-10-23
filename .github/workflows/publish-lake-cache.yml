@@ -66,7 +66,7 @@ jobs:
       # Candidate configuration/code is never loaded on this runner. Cross-check
       # only the immutable toolchain pin; executable helpers come from the workflow.
       - name: Check out the immutable toolchain pin
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.revision }}
           sparse-checkout: lean-toolchain
@@ -74,13 +74,13 @@ jobs:
           persist-credentials: false
 
       - name: Prepare pinned shared tools
-        uses: TauCetiProject/TauCetiTools/.github/actions/setup@2fa9b421d1846bc281151b748553b0ba95d4c788
+        uses: TauCetiProject/TauCetiTools/.github/actions/setup@4b554aae4441ade012eaa869b2d0f4eae79176a5
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+          tools-ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
           project-directory: .
       - name: Check out workflow-pinned publication planning tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ${{ inputs.tools_repository }}
           ref: ${{ inputs.tools_ref }}
@@ -94,7 +94,7 @@ jobs:
           persist-credentials: false
 
       - name: Download the staged oleans
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ${{ inputs.artifact-name }}
           path: ${{ runner.temp }}/lake-cache-staging
@@ -256,7 +256,7 @@ jobs:
         if: always()
         continue-on-error: true
         timeout-minutes: 3
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ci-publication-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ci-publication.json

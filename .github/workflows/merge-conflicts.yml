@@ -59,8 +59,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  app-credentials:
+    if: >-
+      ((github.repository == 'cslib-community/EpsilonEridani'))
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check App settings for setup
+        id: check
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          ready=true
+          for name in APP_ID APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              ready=false
+              printf 'Missing %s. Finish App credential setup with tauceti-tools doctor.\n' "$name" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          printf 'ready=%s\n' "$ready" >> "$GITHUB_OUTPUT"
+
   label:
-    if: github.repository == 'cslib-community/EpsilonEridani'
+    needs: app-credentials
+    if: >-
+      needs.app-credentials.outputs.ready == 'true' && (github.repository == 'cslib-community/EpsilonEridani')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -82,16 +108,16 @@ jobs:
       # `ref` is explicit because workflow_dispatch otherwise checks out the ref it
       # was dispatched from -- which would run a branch's copy of this script with
       # the App token minted above.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: main
           sparse-checkout: scripts/pr_status
           persist-credentials: false
       - name: Prepare pinned shared tools
-        uses: TauCetiProject/TauCetiTools/.github/actions/setup@2fa9b421d1846bc281151b748553b0ba95d4c788
+        uses: TauCetiProject/TauCetiTools/.github/actions/setup@4b554aae4441ade012eaa869b2d0f4eae79176a5
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+          tools-ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
           project-directory: .
       - name: Label conflicting PRs
         env:

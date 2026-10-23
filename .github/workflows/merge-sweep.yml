@@ -37,7 +37,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  app-credentials:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check App settings for setup
+        id: check
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          ready=true
+          for name in APP_ID APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              ready=false
+              printf 'Missing %s. Finish App credential setup with tauceti-tools doctor.\n' "$name" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          printf 'ready=%s\n' "$ready" >> "$GITHUB_OUTPUT"
+
   sweep:
+    if: needs.app-credentials.outputs.ready == 'true'
+    needs: app-credentials
     # Pinned to a TauCetiReview commit; bump deliberately. The reusable workflow receives the App
     # secrets, so a floating @main would be a supply-chain risk.
     # Re-pin together with the other two callers and .github/actions/checkout-merge-policy
@@ -46,7 +70,7 @@ jobs:
     with:
       review_ref: fc9a57c67bf375ff349abc15c91f7fdb3ad2d486
       tools_repository: TauCetiProject/TauCetiTools
-      tools_ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+      tools_ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
       dry_run: ${{ inputs.dry-run || false }}
       focused: ${{ github.event_name == 'repository_dispatch' || (github.event_name == 'workflow_dispatch' && !inputs.full-scan) }}
     secrets:
