@@ -29,7 +29,8 @@ Upload it with stdin:
 gh secret set APP_PRIVATE_KEY --repo cslib-community/EpsilonEridani < path/to/APP_PRIVATE_KEY
 ```
 
-The repository also has the non-secret Actions variable `MERGE_BACKEND=direct`.
+The repository also has the non-secret Actions variable `MERGE_BACKEND=queue`: automation
+merges through GitHub's merge queue.
 
 ## How workflows use them
 
@@ -45,6 +46,21 @@ Anyone with **write or admin** access to this repository can run a workflow with
 the `main` ruleset requires code-owner review for workflow changes there, but a pushed branch
 with a modified workflow also receives them. Keep write access limited to trusted maintainers,
 and review collaborator and team access when people join or leave.
+
+## Merging human-owned changes
+
+The `main` ruleset ("Tau Ceti content") requires a pull request, code-owner review, the
+`build`, `bump-guard` and `scope` checks and the merge queue, and blocks deletion and force
+pushes. Changes outside `EpsilonEridani/` (configuration, workflows, lakefiles, docs) keep
+`scope` red by design, and a changed lakefile is never executed by the trusted build. After
+review, a repository administrator lands such a PR with GitHub's admin merge:
+
+```sh
+gh pr merge PR_NUMBER --repo cslib-community/EpsilonEridani --admin --squash
+```
+
+The only bypass actor is the repository admin role, for pull requests only; the automation App
+is deliberately not on the bypass list, so automated merges always pass the required checks.
 
 ## Rotating the key
 
