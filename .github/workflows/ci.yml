@@ -67,10 +67,10 @@ jobs:
           fetch-depth: 0
 
       - name: Prepare pinned shared tools
-        uses: TauCetiProject/TauCetiTools/.github/actions/setup@4b554aae4441ade012eaa869b2d0f4eae79176a5
+        uses: TauCetiProject/TauCetiTools/.github/actions/setup@45fa5b01ac0a81df7250147d5e7b6cbe252524fe
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
+          tools-ref: 45fa5b01ac0a81df7250147d5e7b6cbe252524fe
           project-directory: .
       - name: Import-boundary guard (EpsilonEridani/ and EpsilonEridani.lean ⊬ roadmap/review)
         run: |
@@ -410,7 +410,7 @@ jobs:
     uses: ./.github/workflows/publish-lake-cache.yml
     with:
       tools_repository: TauCetiProject/TauCetiTools
-      tools_ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
+      tools_ref: 45fa5b01ac0a81df7250147d5e7b6cbe252524fe
       revision: ${{ github.sha }}
       artifact-name: lake-cache-staging
       reported-toolchain: ${{ needs.build.outputs.reported-toolchain }}

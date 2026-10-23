@@ -43,10 +43,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: TauCetiProject/TauCetiTools/.github/actions/setup@4b554aae4441ade012eaa869b2d0f4eae79176a5
+      - uses: TauCetiProject/TauCetiTools/.github/actions/setup@45fa5b01ac0a81df7250147d5e7b6cbe252524fe
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 4b554aae4441ade012eaa869b2d0f4eae79176a5
+          tools-ref: 45fa5b01ac0a81df7250147d5e7b6cbe252524fe
       - name: Install elan (trusted, pinned + checksum)
         env:
           ELAN_SHA256: df0b2b3a439961ffcbb3985214365ffe40f49bc871df04dff268c7d8e21ca8b2
