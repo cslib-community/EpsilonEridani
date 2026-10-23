@@ -14,7 +14,7 @@ description: >-
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       with:
         repository: TauCetiProject/TauCetiReview
         ref: fc9a57c67bf375ff349abc15c91f7fdb3ad2d486

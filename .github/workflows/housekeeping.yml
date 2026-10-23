@@ -24,7 +24,31 @@ on:
         default: false
 
 jobs:
+  app-credentials:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check App settings for setup
+        id: check
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          ready=true
+          for name in APP_ID APP_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              ready=false
+              printf 'Missing %s. Finish App credential setup with tauceti-tools doctor.\n' "$name" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          printf 'ready=%s\n' "$ready" >> "$GITHUB_OUTPUT"
+
   housekeeping:
+    if: needs.app-credentials.outputs.ready == 'true'
+    needs: app-credentials
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -40,13 +64,13 @@ jobs:
           permission-issues: read
           permission-pull-requests: write
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Prepare pinned shared tools
-        uses: TauCetiProject/TauCetiTools/.github/actions/setup@2fa9b421d1846bc281151b748553b0ba95d4c788
+        uses: TauCetiProject/TauCetiTools/.github/actions/setup@45fa5b01ac0a81df7250147d5e7b6cbe252524fe
         with:
           tools-repository: TauCetiProject/TauCetiTools
-          tools-ref: 2fa9b421d1846bc281151b748553b0ba95d4c788
+          tools-ref: 45fa5b01ac0a81df7250147d5e7b6cbe252524fe
           project-directory: .
       - name: Abandon stuck PRs and close duplicates
         env:
