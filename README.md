@@ -97,9 +97,15 @@ when using the library.
 ## Contributing with a worker
 
 The [Tau Ceti worker](https://github.com/TauCetiProject/TauCetiWorker) can work on this
-project using its canonical configuration. It needs `git`, an up-to-date `gh`, `uv`, `jq`, a Lean
-toolchain, and an authenticated agent CLI such as Codex or Claude. The worker uses
-your GitHub identity and authors through your fork.
+project using its canonical configuration. It needs `git`, an up-to-date `gh`, `uv`,
+`jq`, a Lean toolchain, and an authenticated agent CLI such as Codex or Claude. The
+worker uses your GitHub identity and authors through your fork.
+
+By default, workers run agents directly on your host with sandboxing and permission
+prompts bypassed. To run eligible code and review tasks in a container, set up
+[Bubble](https://github.com/TauCetiProject/TauCetiWorker/blob/main/docs/sandbox.md)
+and add `--bubble` to the `work` commands below. The sandbox guide covers its runtime
+and proxy requirements. Progress-report tasks still run on the host.
 
 ```bash
 uv tool install git+https://github.com/TauCetiProject/TauCetiWorker
