@@ -11,19 +11,24 @@ public import Mathlib.Data.List.Sort
 # Sorted association lists
 
 The specification model for ordered maps: a list of `(key, value)` pairs whose keys are strictly
-increasing, so that keys are distinct. The model operations are plain list functions. Lookup is
-`List.lookup`; insertion replaces an existing key; erasure, minimum, maximum, strict predecessor
-and successor, closed-interval restriction, and rank are defined here and are the reference
-semantics against which tree-shaped maps are verified through their `toList`.
+increasing, so that keys are distinct. `List.IsSortedAssoc` is the predicate, stated as
+`List.Pairwise (· < ·)` on the key list, which is the form that the splitting and concatenation
+lemmas consume; Mathlib's `List.SortedLT` is the same predicate by `List.sortedLT_iff_pairwise`.
 
-Sortedness is stated as `List.Pairwise (· < ·)` on the key list, which is the form that the
-splitting and concatenation lemmas consume. Mathlib's `List.SortedLT` is the same predicate by
-`List.sortedLT_iff_pairwise`.
+The model operations live in `EpsilonEridani.SortedAssoc` and are plain list functions. Lookup is
+`List.lookup`; insertion replaces an existing key; erasure, strict predecessor and successor,
+closed-interval restriction, and rank are defined here. The minimum and maximum of a sorted list
+are its `head?` and `getLast?`, characterised by `List.IsSortedAssoc.head?_eq_some_iff` and
+`List.IsSortedAssoc.getLast?_eq_some_iff`. Together these are the reference semantics against
+which tree-shaped maps are verified through their `toList`.
 
-The lemmas come in two kinds. Those about the model operations themselves (`insert`, `erase`,
-`pred?`, `succ?`, `rank`) say what each operation does to a sorted list. Those about `++`
-(`isSortedAssoc_append_iff`, `lookup_append_of_forall_lt`, `rank_append`, ...) are the shapes
-used when a tree node's entry list is split as `first ++ (k, v) :: rest`, following the
+The operations are `@[expose]`d: consumers check examples by `decide` and `rfl`, which must
+evaluate them from other modules.
+
+The lemmas come in two kinds. Those about the operations themselves (`insert`, `erase`, `pred?`,
+`succ?`, `rank`) say what each does to a sorted list. Those about `++`
+(`List.isSortedAssoc_append_iff`, `lookup_append_of_forall_lt`, `rank_append`, ...) are the
+shapes used when a tree node's entry list is split as `first ++ (k, v) :: rest`, following the
 treatment of search trees as sorted sequences in Cormen, Leiserson, Rivest and Stein,
 *Introduction to Algorithms*, Chapter 18, and Bayer and McCreight, *Organization and maintenance
 of large ordered indexes* (1972).
@@ -31,76 +36,40 @@ of large ordered indexes* (1972).
 
 public section
 
-namespace EpsilonEridani.SortedAssoc
-
 universe u v
+
+namespace List
 
 variable {α : Type u} {β : Type v} [LinearOrder α]
 
-/-- Keys strictly increasing, hence distinct. -/
+/-- An association list whose keys are strictly increasing, hence distinct. -/
 def IsSortedAssoc (l : List (α × β)) : Prop :=
   (l.map Prod.fst).Pairwise (· < ·)
 
-instance (l : List (α × β)) : Decidable (IsSortedAssoc l) :=
+instance (l : List (α × β)) : Decidable l.IsSortedAssoc :=
   inferInstanceAs (Decidable ((l.map Prod.fst).Pairwise (· < ·)))
 
-/-- Lookup is `List.lookup`; the model does not introduce a second lookup. -/
-abbrev lookup (k : α) (l : List (α × β)) : Option β :=
-  List.lookup k l
+variable {l l₁ l₂ : List (α × β)} {k : α} {v : β} {p q : α × β}
 
-/-- Insert-or-replace at the sorted position. -/
-@[expose] def insert (k : α) (v : β) : List (α × β) → List (α × β)
-  | [] => [(k, v)]
-  | (k', v') :: rest =>
-    if k < k' then (k, v) :: (k', v') :: rest
-    else if k = k' then (k, v) :: rest
-    else (k', v') :: insert k v rest
+@[simp] theorem isSortedAssoc_nil : ([] : List (α × β)).IsSortedAssoc := List.Pairwise.nil
 
-/-- Remove the entry with key `k`, if any. -/
-@[expose] def erase (k : α) (l : List (α × β)) : List (α × β) :=
-  l.filter fun p => p.1 ≠ k
-
-/-- The entry with least key. -/
-abbrev min? (l : List (α × β)) : Option (α × β) := l.head?
-
-/-- The entry with greatest key. -/
-abbrev max? (l : List (α × β)) : Option (α × β) := l.getLast?
-
-/-- The greatest entry with key strictly below `k`. -/
-@[expose] def pred? (k : α) (l : List (α × β)) : Option (α × β) :=
-  (l.filter fun p => p.1 < k).getLast?
-
-/-- The least entry with key strictly above `k`. -/
-@[expose] def succ? (k : α) (l : List (α × β)) : Option (α × β) :=
-  (l.filter fun p => k < p.1).head?
-
-/-- Restriction to the closed key interval `[lo, hi]`. -/
-@[expose] def range (lo hi : α) (l : List (α × β)) : List (α × β) :=
-  l.filter fun p => lo ≤ p.1 ∧ p.1 ≤ hi
-
-/-- The rank of `k`: the number of keys strictly below it. -/
-@[expose] def rank (k : α) (l : List (α × β)) : ℕ :=
-  (l.filter fun p => p.1 < k).length
-
-variable {l l₁ l₂ : List (α × β)} {k k' : α} {v : β} {p q : α × β}
-
-/-! ### Sortedness: structural lemmas -/
-
-@[simp] theorem isSortedAssoc_nil : IsSortedAssoc ([] : List (α × β)) := List.Pairwise.nil
-
+/-- A sorted association list is an entry whose key is below every later key, then a sorted
+list. -/
 theorem isSortedAssoc_cons_iff :
-    IsSortedAssoc (p :: l) ↔ (∀ q ∈ l, p.1 < q.1) ∧ IsSortedAssoc l := by
+    (p :: l).IsSortedAssoc ↔ (∀ q ∈ l, p.1 < q.1) ∧ l.IsSortedAssoc := by
   simp [IsSortedAssoc, List.pairwise_cons]
 
+/-- A concatenation is sorted iff both parts are and every key of the first part is below
+every key of the second. -/
 theorem isSortedAssoc_append_iff :
-    IsSortedAssoc (l₁ ++ l₂) ↔
-      IsSortedAssoc l₁ ∧ IsSortedAssoc l₂ ∧ ∀ p ∈ l₁, ∀ q ∈ l₂, p.1 < q.1 := by
+    (l₁ ++ l₂).IsSortedAssoc ↔
+      l₁.IsSortedAssoc ∧ l₂.IsSortedAssoc ∧ ∀ p ∈ l₁, ∀ q ∈ l₂, p.1 < q.1 := by
   simp [IsSortedAssoc, List.pairwise_append]
 
 /-- Splitting a sorted list at a key: the shape of the lemma used at every tree node. -/
 theorem isSortedAssoc_append_cons_iff :
-    IsSortedAssoc (l₁ ++ (k, v) :: l₂) ↔
-      IsSortedAssoc l₁ ∧ IsSortedAssoc l₂ ∧ (∀ p ∈ l₁, p.1 < k) ∧ ∀ p ∈ l₂, k < p.1 := by
+    (l₁ ++ (k, v) :: l₂).IsSortedAssoc ↔
+      l₁.IsSortedAssoc ∧ l₂.IsSortedAssoc ∧ (∀ p ∈ l₁, p.1 < k) ∧ ∀ p ∈ l₂, k < p.1 := by
   rw [isSortedAssoc_append_iff, isSortedAssoc_cons_iff]
   constructor
   · rintro ⟨h₁, ⟨h₂, hl₂⟩, h₃⟩
@@ -111,11 +80,17 @@ theorem isSortedAssoc_append_cons_iff :
     · exact h₃ p hp
     · exact (h₃ p hp).trans (h₂ q hq)
 
-theorem IsSortedAssoc.sublist (h : IsSortedAssoc l₂) (hs : l₁.Sublist l₂) : IsSortedAssoc l₁ :=
+/-- A sublist of a sorted association list is sorted. -/
+theorem IsSortedAssoc.sublist (h : l₂.IsSortedAssoc) (hs : l₁.Sublist l₂) : l₁.IsSortedAssoc :=
   List.Pairwise.sublist (hs.map Prod.fst) h
 
+/-- Filtering a sorted association list keeps it sorted. -/
+theorem IsSortedAssoc.filter (f : α × β → Bool) (h : l.IsSortedAssoc) :
+    (l.filter f).IsSortedAssoc :=
+  h.sublist List.filter_sublist
+
 /-- Keys are distinct: two entries of a sorted list with the same key are the same entry. -/
-theorem IsSortedAssoc.eq_of_mem_of_mem (h : IsSortedAssoc l) (hp : p ∈ l) (hq : q ∈ l)
+theorem IsSortedAssoc.eq_of_mem_of_mem (h : l.IsSortedAssoc) (hp : p ∈ l) (hq : q ∈ l)
     (hk : p.1 = q.1) : p = q := by
   induction l with
   | nil => simp at hp
@@ -127,14 +102,94 @@ theorem IsSortedAssoc.eq_of_mem_of_mem (h : IsSortedAssoc l) (hp : p ∈ l) (hq 
     · exact absurd hk.symm (h.1 p hp').ne
     · exact ih h.2 hp' hq'
 
+/-- The head of a sorted association list is its entry of least key. -/
+theorem IsSortedAssoc.head?_eq_some_iff (h : l.IsSortedAssoc) :
+    l.head? = some p ↔ p ∈ l ∧ ∀ q ∈ l, p.1 ≤ q.1 := by
+  cases l with
+  | nil => simp
+  | cons a l =>
+    rw [isSortedAssoc_cons_iff] at h
+    simp only [List.head?_cons, Option.some.injEq, List.mem_cons]
+    constructor
+    · rintro rfl
+      refine ⟨Or.inl rfl, fun q hq => ?_⟩
+      rcases hq with rfl | hq
+      · exact le_rfl
+      · exact (h.1 q hq).le
+    · rintro ⟨hp, hle⟩
+      rcases hp with rfl | hp
+      · rfl
+      · exact absurd (hle a (Or.inl rfl)) (not_le.2 (h.1 p hp))
+
+/-- The last entry of a sorted association list is its entry of greatest key. -/
+theorem IsSortedAssoc.getLast?_eq_some_iff (h : l.IsSortedAssoc) :
+    l.getLast? = some p ↔ p ∈ l ∧ ∀ q ∈ l, q.1 ≤ p.1 := by
+  have aux : ∀ {b : α × β}, l.getLast? = some b → b ∈ l ∧ ∀ q ∈ l, q.1 ≤ b.1 := by
+    intro b hb
+    obtain ⟨l', rfl⟩ := List.getLast?_eq_some_iff.1 hb
+    rw [isSortedAssoc_append_iff] at h
+    refine ⟨List.mem_append_right _ (List.mem_singleton_self _), fun q hq => ?_⟩
+    rcases List.mem_append.1 hq with hq | hq
+    · exact (h.2.2 q hq b (List.mem_singleton_self _)).le
+    · rw [List.mem_singleton.1 hq]
+  refine ⟨aux, fun ⟨hp, hle⟩ => ?_⟩
+  obtain ⟨b, hb⟩ : ∃ b, l.getLast? = some b :=
+    Option.isSome_iff_exists.1 (by simpa using List.ne_nil_of_mem hp)
+  obtain ⟨hbl, hble⟩ := aux hb
+  rw [hb, h.eq_of_mem_of_mem hbl hp (le_antisymm (hle b hbl) (hble p hp))]
+
+end List
+
+namespace EpsilonEridani.SortedAssoc
+
+variable {α : Type u} {β : Type v} [LinearOrder α]
+
+/-- Lookup is `List.lookup`; the model does not introduce a second lookup. -/
+abbrev lookup (k : α) (l : List (α × β)) : Option β :=
+  List.lookup k l
+
+/-- Insert `(k, v)` before the first entry whose key is at least `k`, replacing that entry if
+its key is `k`. On a sorted list this is insert-or-replace at the sorted position. -/
+@[expose] def insert (k : α) (v : β) : List (α × β) → List (α × β)
+  | [] => [(k, v)]
+  | (k', v') :: rest =>
+    if k < k' then (k, v) :: (k', v') :: rest
+    else if k = k' then (k, v) :: rest
+    else (k', v') :: insert k v rest
+
+/-- Remove every entry with key `k`; on a sorted list there is at most one. -/
+@[expose] def erase (k : α) (l : List (α × β)) : List (α × β) :=
+  l.filter fun p => p.1 ≠ k
+
+/-- The last entry with key strictly below `k`. On a sorted list this is the greatest such
+entry, the strict predecessor of `k`. -/
+@[expose] def pred? (k : α) (l : List (α × β)) : Option (α × β) :=
+  (l.filter fun p => p.1 < k).getLast?
+
+/-- The first entry with key strictly above `k`. On a sorted list this is the least such entry,
+the strict successor of `k`. -/
+@[expose] def succ? (k : α) (l : List (α × β)) : Option (α × β) :=
+  (l.filter fun p => k < p.1).head?
+
+/-- Restriction to the entries with keys in the closed interval `[lo, hi]`. -/
+@[expose] def range (lo hi : α) (l : List (α × β)) : List (α × β) :=
+  l.filter fun p => lo ≤ p.1 ∧ p.1 ≤ hi
+
+/-- The rank of `k`: the number of entries with key strictly below it. -/
+@[expose] def rank (k : α) (l : List (α × β)) : ℕ :=
+  (l.filter fun p => p.1 < k).length
+
+variable {l l₁ l₂ : List (α × β)} {k k' : α} {v : β} {p q : α × β}
+
 /-! ### Lookup -/
 
-theorem lookup_eq_some_iff (h : IsSortedAssoc l) : lookup k l = some v ↔ (k, v) ∈ l := by
+/-- On a sorted list, lookup finds exactly the entries present. -/
+theorem lookup_eq_some_iff (h : l.IsSortedAssoc) : lookup k l = some v ↔ (k, v) ∈ l := by
   induction l with
   | nil => simp
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    rw [isSortedAssoc_cons_iff] at h
+    rw [List.isSortedAssoc_cons_iff] at h
     by_cases hk : k = a₁
     · subst hk
       simp only [lookup, List.lookup_cons, beq_self_eq_true, Option.some.injEq, List.mem_cons,
@@ -148,12 +203,14 @@ theorem lookup_eq_some_iff (h : IsSortedAssoc l) : lookup k l = some v ↔ (k, v
     · have hb : (k == a₁) = false := beq_eq_false_iff_ne.2 hk
       simp [lookup, List.lookup_cons, hb, hk, ih h.2]
 
+/-- Lookup skips a prefix whose keys are all below the query. -/
 theorem lookup_append_of_forall_lt (h : ∀ p ∈ l₁, p.1 < k) :
     lookup k (l₁ ++ l₂) = lookup k l₂ := by
   have h₁ : List.lookup k l₁ = none :=
     List.lookup_eq_none_iff.2 fun p hp => by simpa using (h p hp).ne'
   rw [lookup, List.lookup_append, h₁, Option.none_or]
 
+/-- Lookup ignores a suffix whose keys are all above the query. -/
 theorem lookup_append_of_forall_gt (h : ∀ p ∈ l₂, k < p.1) :
     lookup k (l₁ ++ l₂) = lookup k l₁ := by
   have h₂ : List.lookup k l₂ = none :=
@@ -162,10 +219,18 @@ theorem lookup_append_of_forall_gt (h : ∀ p ∈ l₂, k < p.1) :
 
 /-! ### Insertion -/
 
-/-- An entry of `insert k v l` is the new entry or an entry of `l`. No sortedness is needed. -/
+@[simp] theorem insert_nil : insert k v ([] : List (α × β)) = [(k, v)] := rfl
+
+theorem insert_cons :
+    insert k v (p :: l) =
+      if k < p.1 then (k, v) :: p :: l else if k = p.1 then (k, v) :: l else p :: insert k v l := by
+  obtain ⟨a₁, a₂⟩ := p
+  rfl
+
+/-- An entry of `insert k v l` is the new entry or an entry of `l`. -/
 theorem mem_of_mem_insert (hq : q ∈ insert k v l) : q = (k, v) ∨ q ∈ l := by
   induction l with
-  | nil => simpa [insert] using hq
+  | nil => simpa using hq
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
     simp only [insert] at hq
@@ -180,49 +245,50 @@ theorem mem_of_mem_insert (hq : q ∈ insert k v l) : q = (k, v) ∨ q ∈ l := 
         · exact Or.inl h
         · exact Or.inr (List.mem_cons_of_mem _ h)
 
-theorem isSortedAssoc_insert (h : IsSortedAssoc l) : IsSortedAssoc (insert k v l) := by
+/-- Insertion preserves sortedness. -/
+theorem isSortedAssoc_insert (h : l.IsSortedAssoc) : (insert k v l).IsSortedAssoc := by
   induction l with
-  | nil => simp [insert, IsSortedAssoc]
+  | nil => simp [List.IsSortedAssoc]
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    rw [isSortedAssoc_cons_iff] at h
+    rw [List.isSortedAssoc_cons_iff] at h
     simp only [insert]
     split_ifs with h₁ h₂
-    · rw [isSortedAssoc_cons_iff, isSortedAssoc_cons_iff]
+    · rw [List.isSortedAssoc_cons_iff, List.isSortedAssoc_cons_iff]
       refine ⟨fun q hq => ?_, h⟩
       rcases List.mem_cons.1 hq with rfl | hq
       · exact h₁
       · exact h₁.trans (h.1 q hq)
     · subst h₂
-      exact isSortedAssoc_cons_iff.2 h
-    · rw [isSortedAssoc_cons_iff]
+      exact List.isSortedAssoc_cons_iff.2 h
+    · rw [List.isSortedAssoc_cons_iff]
       refine ⟨fun q hq => ?_, ih h.2⟩
       have hak : a₁ < k := lt_of_le_of_ne (not_lt.1 h₁) (Ne.symm h₂)
       rcases mem_of_mem_insert hq with rfl | hq
       · exact hak
       · exact h.1 q hq
 
-theorem lookup_insert_self (h : IsSortedAssoc l) : lookup k (insert k v l) = some v := by
+/-- Lookup of the inserted key finds the new value, on any list. -/
+@[simp] theorem lookup_insert_self : lookup k (insert k v l) = some v := by
   induction l with
-  | nil => simp [insert]
+  | nil => simp
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    rw [isSortedAssoc_cons_iff] at h
     simp only [insert]
     split_ifs with h₁ h₂
     · simp
     · simp
     · have hb : (k == a₁) = false := beq_eq_false_iff_ne.2 h₂
-      simp [lookup, List.lookup_cons, hb, ih h.2]
+      simp [lookup, List.lookup_cons, hb, ih]
 
-theorem lookup_insert_of_ne (h : IsSortedAssoc l) (hne : k' ≠ k) :
+/-- Insertion does not change lookup at other keys, on any list. -/
+@[simp] theorem lookup_insert_of_ne (hne : k' ≠ k) :
     lookup k' (insert k v l) = lookup k' l := by
   have hb : (k' == k) = false := beq_eq_false_iff_ne.2 hne
   induction l with
-  | nil => simp [insert, hne]
+  | nil => simp [hne]
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    rw [isSortedAssoc_cons_iff] at h
     simp only [insert]
     split_ifs with h₁ h₂
     · simp [lookup, List.lookup_cons, hb]
@@ -232,15 +298,17 @@ theorem lookup_insert_of_ne (h : IsSortedAssoc l) (hne : k' ≠ k) :
       · subst hka
         simp [lookup]
       · have hb' : (k' == a₁) = false := beq_eq_false_iff_ne.2 hka
-        simp [lookup, List.lookup_cons, hb', ih h.2]
+        simp [lookup, List.lookup_cons, hb', ih]
 
-theorem length_insert (h : IsSortedAssoc l) :
+/-- On a sorted list, insertion keeps the length if the key was present and adds one
+otherwise. -/
+theorem length_insert (h : l.IsSortedAssoc) :
     (insert k v l).length = if (lookup k l).isSome then l.length else l.length + 1 := by
   induction l with
-  | nil => simp [insert]
+  | nil => simp
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    rw [isSortedAssoc_cons_iff] at h
+    rw [List.isSortedAssoc_cons_iff] at h
     by_cases h₁ : k < a₁
     · have hnone : lookup k ((a₁, a₂) :: l) = none := by
         refine List.lookup_eq_none_iff.2 fun p hp => ?_
@@ -258,16 +326,29 @@ theorem length_insert (h : IsSortedAssoc l) :
 
 /-! ### Erasure -/
 
-theorem isSortedAssoc_erase (h : IsSortedAssoc l) : IsSortedAssoc (erase k l) :=
-  h.sublist List.filter_sublist
+@[simp] theorem erase_nil : erase k ([] : List (α × β)) = [] := rfl
 
+theorem erase_cons : erase k (p :: l) = if p.1 = k then erase k l else p :: erase k l := by
+  unfold erase
+  rw [List.filter_cons]
+  by_cases hp : p.1 = k <;> simp [hp]
+
+@[simp] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
+  simp [erase, List.mem_filter]
+
+/-- Erasure preserves sortedness. -/
+theorem isSortedAssoc_erase (h : l.IsSortedAssoc) : (erase k l).IsSortedAssoc :=
+  h.filter _
+
+/-- Lookup of the erased key fails, on any list. -/
 @[simp] theorem lookup_erase_self : lookup k (erase k l) = none :=
   List.lookup_eq_none_iff.2 fun p hp => by
     have := (List.mem_filter.1 hp).2
     simp only [decide_eq_true_eq] at this
     simpa [bne_iff_ne] using this.symm
 
-theorem lookup_erase_of_ne (hne : k' ≠ k) : lookup k' (erase k l) = lookup k' l := by
+/-- Erasure does not change lookup at other keys, on any list. -/
+@[simp] theorem lookup_erase_of_ne (hne : k' ≠ k) : lookup k' (erase k l) = lookup k' l := by
   rcases hl : lookup k' l with _ | w
   · exact List.Sublist.lookup_eq_none List.filter_sublist hl
   · obtain ⟨l₁, l₂, rfl, hl₁⟩ := List.lookup_eq_some_iff.1 hl
@@ -275,17 +356,19 @@ theorem lookup_erase_of_ne (hne : k' ≠ k) : lookup k' (erase k l) = lookup k' 
       ⟨erase k l₁, erase k l₂, ?_, fun p hp => hl₁ p (List.mem_filter.1 hp).1⟩
     simp [erase, hne]
 
-theorem erase_of_lookup_eq_none (h : lookup k l = none) : erase k l = l :=
+/-- Erasing an absent key is the identity. -/
+@[simp] theorem erase_of_lookup_eq_none (h : lookup k l = none) : erase k l = l :=
   List.filter_eq_self.2 fun p hp => by
     have hne : k ≠ p.1 := bne_iff_ne.1 (List.lookup_eq_none_iff.1 h p hp)
     simpa using hne.symm
 
-theorem length_erase (h : IsSortedAssoc l) :
+/-- On a sorted list, erasure removes one entry if the key was present and none otherwise. -/
+theorem length_erase (h : l.IsSortedAssoc) :
     (erase k l).length = if (lookup k l).isSome then l.length - 1 else l.length := by
   split_ifs with hk
   · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.1 hk
     obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.1 hw
-    rw [isSortedAssoc_append_cons_iff] at h
+    rw [List.isSortedAssoc_append_cons_iff] at h
     have e₁ : erase k l₁ = l₁ :=
       List.filter_eq_self.2 fun p hp => by simpa using (h.2.2.1 p hp).ne
     have e₂ : erase k l₂ = l₂ :=
@@ -297,54 +380,18 @@ theorem length_erase (h : IsSortedAssoc l) :
     omega
   · rw [erase_of_lookup_eq_none (Option.not_isSome_iff_eq_none.1 hk)]
 
-/-! ### Minimum and maximum -/
-
-theorem min?_eq_some_iff (h : IsSortedAssoc l) :
-    min? l = some p ↔ p ∈ l ∧ ∀ q ∈ l, p.1 ≤ q.1 := by
-  cases l with
-  | nil => simp
-  | cons a l =>
-    rw [isSortedAssoc_cons_iff] at h
-    simp only [min?, List.head?_cons, Option.some.injEq, List.mem_cons]
-    constructor
-    · rintro rfl
-      refine ⟨Or.inl rfl, fun q hq => ?_⟩
-      rcases hq with rfl | hq
-      · exact le_rfl
-      · exact (h.1 q hq).le
-    · rintro ⟨hp, hle⟩
-      rcases hp with rfl | hp
-      · rfl
-      · exact absurd (hle a (Or.inl rfl)) (not_le.2 (h.1 p hp))
-
-theorem max?_eq_some_iff (h : IsSortedAssoc l) :
-    max? l = some p ↔ p ∈ l ∧ ∀ q ∈ l, q.1 ≤ p.1 := by
-  have aux : ∀ {b : α × β}, max? l = some b → b ∈ l ∧ ∀ q ∈ l, q.1 ≤ b.1 := by
-    intro b hb
-    obtain ⟨l', rfl⟩ := List.getLast?_eq_some_iff.1 hb
-    rw [isSortedAssoc_append_iff] at h
-    refine ⟨List.mem_append_right _ (List.mem_singleton_self _), fun q hq => ?_⟩
-    rcases List.mem_append.1 hq with hq | hq
-    · exact (h.2.2 q hq b (List.mem_singleton_self _)).le
-    · rw [List.mem_singleton.1 hq]
-  refine ⟨aux, fun ⟨hp, hle⟩ => ?_⟩
-  obtain ⟨b, hb⟩ : ∃ b, max? l = some b :=
-    Option.isSome_iff_exists.1 (by simpa [max?] using List.ne_nil_of_mem hp)
-  obtain ⟨hbl, hble⟩ := aux hb
-  rw [hb, h.eq_of_mem_of_mem hbl hp (le_antisymm (hle b hbl) (hble p hp))]
-
 /-! ### Predecessor and successor -/
 
-theorem pred?_eq_some_iff (h : IsSortedAssoc l) :
+/-- On a sorted list, `pred? k` is the greatest entry with key below `k`. -/
+theorem pred?_eq_some_iff (h : l.IsSortedAssoc) :
     pred? k l = some p ↔ p ∈ l ∧ p.1 < k ∧ ∀ q ∈ l, q.1 < k → q.1 ≤ p.1 := by
-  have hf : IsSortedAssoc (l.filter fun p => p.1 < k) := h.sublist List.filter_sublist
-  rw [pred?, ← max?, max?_eq_some_iff hf]
+  rw [pred?, (h.filter _).getLast?_eq_some_iff]
   simp [List.mem_filter, and_assoc]
 
-theorem succ?_eq_some_iff (h : IsSortedAssoc l) :
+/-- On a sorted list, `succ? k` is the least entry with key above `k`. -/
+theorem succ?_eq_some_iff (h : l.IsSortedAssoc) :
     succ? k l = some p ↔ p ∈ l ∧ k < p.1 ∧ ∀ q ∈ l, k < q.1 → p.1 ≤ q.1 := by
-  have hf : IsSortedAssoc (l.filter fun p => k < p.1) := h.sublist List.filter_sublist
-  rw [succ?, ← min?, min?_eq_some_iff hf]
+  rw [succ?, (h.filter _).head?_eq_some_iff]
   simp [List.mem_filter, and_assoc]
 
 /-! ### Range and rank -/
@@ -352,6 +399,11 @@ theorem succ?_eq_some_iff (h : IsSortedAssoc l) :
 @[simp] theorem mem_range_iff {lo hi : α} :
     p ∈ range lo hi l ↔ p ∈ l ∧ lo ≤ p.1 ∧ p.1 ≤ hi := by
   simp [range, List.mem_filter]
+
+/-- Range restriction preserves sortedness. -/
+theorem isSortedAssoc_range {lo hi : α} (h : l.IsSortedAssoc) :
+    (range lo hi l).IsSortedAssoc :=
+  h.filter _
 
 @[simp] theorem range_append {lo hi : α} :
     range lo hi (l₁ ++ l₂) = range lo hi l₁ ++ range lo hi l₂ := by
@@ -362,12 +414,12 @@ theorem succ?_eq_some_iff (h : IsSortedAssoc l) :
   simp [rank, List.filter_append]
 
 /-- On a sorted list, the rank is the length of the prefix of keys below `k`. -/
-theorem rank_eq_length_takeWhile (h : IsSortedAssoc l) :
+theorem rank_eq_length_takeWhile (h : l.IsSortedAssoc) :
     rank k l = (l.takeWhile fun p => decide (p.1 < k)).length := by
   induction l with
   | nil => rfl
   | cons a l ih =>
-    rw [isSortedAssoc_cons_iff] at h
+    rw [List.isSortedAssoc_cons_iff] at h
     rw [rank, List.filter_cons, List.takeWhile_cons]
     by_cases ha : a.1 < k
     · simp only [ha, decide_true, ↓reduceIte, List.length_cons]
@@ -389,8 +441,8 @@ example : range 3 2 [(1, 10), (2, 20), (3, 30)] = [] := by decide
 example : pred? 3 [(1, 10), (2, 20), (3, 30)] = some (2, 20) := by decide
 example : succ? 3 [(1, 10), (2, 20), (3, 30)] = none := by decide
 example : rank 3 [(1, 10), (2, 20), (3, 30)] = 2 := by decide
-example : IsSortedAssoc [(1, 10), (2, 20)] := by decide
-example : ¬ IsSortedAssoc [(2, 20), (2, 21)] := by decide
+example : [(1, 10), (2, 20)].IsSortedAssoc := by decide
+example : ¬ [(2, 20), (2, 21)].IsSortedAssoc := by decide
 example : insert 2 "b" [(1, "a"), (3, "c")] = [(1, "a"), (2, "b"), (3, "c")] := by decide
 
 end EpsilonEridani.SortedAssoc
