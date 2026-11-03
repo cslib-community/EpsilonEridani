@@ -142,7 +142,58 @@ end List
 
 namespace EpsilonEridani.SortedAssoc
 
-variable {α : Type u} {β : Type v} [LinearOrder α]
+variable {α : Type u} {β : Type v}
+
+/-! ### Erasure
+
+Erasure and its unconditional laws need only decidable equality of keys. -/
+
+section Erase
+
+variable [DecidableEq α] {l : List (α × β)} {k k' : α} {p : α × β}
+
+/-- Remove every entry with key `k`; on a sorted list there is at most one. -/
+@[expose] def erase (k : α) (l : List (α × β)) : List (α × β) :=
+  l.filter fun p => p.1 ≠ k
+
+theorem erase_def : erase k l = l.filter fun p => p.1 ≠ k := rfl
+
+@[simp] theorem erase_nil : erase k ([] : List (α × β)) = [] := rfl
+
+theorem erase_cons : erase k (p :: l) = if p.1 = k then erase k l else p :: erase k l := by
+  unfold erase
+  rw [List.filter_cons]
+  by_cases hp : p.1 = k <;> simp [hp]
+
+@[simp] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
+  simp [erase, List.mem_filter]
+
+/-- Lookup of the erased key fails, on any list. -/
+@[simp] theorem lookup_erase_self : List.lookup k (erase k l) = none :=
+  List.lookup_eq_none_iff.2 fun p hp => by
+    have := (List.mem_filter.1 hp).2
+    simp only [decide_eq_true_eq] at this
+    simpa [bne_iff_ne] using this.symm
+
+/-- Erasure does not change lookup at other keys, on any list. -/
+@[simp] theorem lookup_erase_of_ne (hne : k' ≠ k) :
+    List.lookup k' (erase k l) = List.lookup k' l := by
+  rcases hl : List.lookup k' l with _ | w
+  · exact List.Sublist.lookup_eq_none List.filter_sublist hl
+  · obtain ⟨l₁, l₂, rfl, hl₁⟩ := List.lookup_eq_some_iff.1 hl
+    refine List.lookup_eq_some_iff.2
+      ⟨erase k l₁, erase k l₂, ?_, fun p hp => hl₁ p (List.mem_filter.1 hp).1⟩
+    simp [erase, hne]
+
+/-- Erasing an absent key is the identity. -/
+@[simp] theorem erase_of_lookup_eq_none (h : List.lookup k l = none) : erase k l = l :=
+  List.filter_eq_self.2 fun p hp => by
+    have hne : k ≠ p.1 := bne_iff_ne.1 (List.lookup_eq_none_iff.1 h p hp)
+    simpa using hne.symm
+
+end Erase
+
+variable [LinearOrder α]
 
 /-- Insert `(k, v)` before the first entry whose key is at least `k`, replacing that entry if
 its key is `k`. On a sorted list this is insert-or-replace at the sorted position. -/
@@ -152,10 +203,6 @@ its key is `k`. On a sorted list this is insert-or-replace at the sorted positio
     if k < k' then (k, v) :: (k', v') :: rest
     else if k = k' then (k, v) :: rest
     else (k', v') :: insert k v rest
-
-/-- Remove every entry with key `k`; on a sorted list there is at most one. -/
-@[expose] def erase (k : α) (l : List (α × β)) : List (α × β) :=
-  l.filter fun p => p.1 ≠ k
 
 /-- The last entry with key strictly below `k`. On a sorted list this is the greatest such
 entry, the strict predecessor of `k`. -/
@@ -320,46 +367,11 @@ theorem length_insert (h : l.IsSortedAssoc) :
           hb]
         split_ifs <;> rfl
 
-/-! ### Erasure -/
-
-theorem erase_def : erase k l = l.filter fun p => p.1 ≠ k := rfl
-
-@[simp] theorem erase_nil : erase k ([] : List (α × β)) = [] := rfl
-
-theorem erase_cons : erase k (p :: l) = if p.1 = k then erase k l else p :: erase k l := by
-  unfold erase
-  rw [List.filter_cons]
-  by_cases hp : p.1 = k <;> simp [hp]
-
-@[simp] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
-  simp [erase, List.mem_filter]
+/-! ### Erasure on sorted lists -/
 
 /-- Erasure preserves sortedness. -/
 theorem isSortedAssoc_erase (h : l.IsSortedAssoc) : (erase k l).IsSortedAssoc :=
   h.filter _
-
-/-- Lookup of the erased key fails, on any list. -/
-@[simp] theorem lookup_erase_self : List.lookup k (erase k l) = none :=
-  List.lookup_eq_none_iff.2 fun p hp => by
-    have := (List.mem_filter.1 hp).2
-    simp only [decide_eq_true_eq] at this
-    simpa [bne_iff_ne] using this.symm
-
-/-- Erasure does not change lookup at other keys, on any list. -/
-@[simp] theorem lookup_erase_of_ne (hne : k' ≠ k) :
-    List.lookup k' (erase k l) = List.lookup k' l := by
-  rcases hl : List.lookup k' l with _ | w
-  · exact List.Sublist.lookup_eq_none List.filter_sublist hl
-  · obtain ⟨l₁, l₂, rfl, hl₁⟩ := List.lookup_eq_some_iff.1 hl
-    refine List.lookup_eq_some_iff.2
-      ⟨erase k l₁, erase k l₂, ?_, fun p hp => hl₁ p (List.mem_filter.1 hp).1⟩
-    simp [erase, hne]
-
-/-- Erasing an absent key is the identity. -/
-@[simp] theorem erase_of_lookup_eq_none (h : List.lookup k l = none) : erase k l = l :=
-  List.filter_eq_self.2 fun p hp => by
-    have hne : k ≠ p.1 := bne_iff_ne.1 (List.lookup_eq_none_iff.1 h p hp)
-    simpa using hne.symm
 
 /-- On a sorted list, erasure removes one entry if the key was present and none otherwise. -/
 theorem length_erase (h : l.IsSortedAssoc) :
