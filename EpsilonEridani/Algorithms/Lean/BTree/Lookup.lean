@@ -23,12 +23,12 @@ the search itself and `containsM` the membership test. The pure operations `slot
 `visit := pure ()`, in the pattern of CSLib's `List.mergeSortM` and `List.idRun_mergeSortM`.
 
 `lookup_eq_of_isSortedAssoc` is the model equation: on any tree whose entries are sorted,
-`lookup` is `List.lookup` on `toList`. `lookup_eq`, `contains_eq` and `contains_iff` specialize
-it to well-formed trees. Costs are not stated here.
+`lookup` is `List.lookup` on `toList`. `lookup_eq`, `contains_eq` and `contains_iff_mem_keys`
+specialize it to well-formed trees. Costs are not stated here.
 
 `lookupM` recurses on `.node c rest`, which is not a structural subterm, so it is defined by
-well-founded recursion on `sizeOf` and does not reduce in the elaborator; the examples evaluate it
-with `decide +kernel`.
+well-founded recursion on `sizeOf`; `decide` and `rfl` cannot evaluate `lookup`, and the examples
+use the equation lemmas `lookup_node_nil` and `lookup_node_cons` through `simp`.
 -/
 
 public section
@@ -92,6 +92,40 @@ abbrev leI (a b : α) : Id Bool := pure (decide (a ≤ b))
 /-- Pure membership test: the `Id` instantiation of `containsM` with `visit := pure ()`. -/
 @[expose] def contains (k : α) (tr : BTree α β) : Bool := Id.run (containsM leI (pure ()) k tr)
 
+/-- `slot` is the `Id` instantiation of `slotM`. -/
+theorem slot_def (k : α) (rest : List (α × β × BTree α β)) :
+    slot k rest = Id.run (slotM leI k rest) := (rfl)
+
+/-- `lookup` is the `Id` instantiation of `lookupM`. -/
+theorem lookup_def (k : α) : lookup k tr = Id.run (lookupM leI (pure ()) k tr) := (rfl)
+
+/-- `contains` is the `Id` instantiation of `containsM`. -/
+theorem contains_def (k : α) : contains k tr = Id.run (containsM leI (pure ()) k tr) := (rfl)
+
+/-- The within-node search in a node without keys stops at position zero. -/
+@[simp] theorem slot_nil (k : α) : slot (β := β) k [] = 0 := rfl
+
+/-- The within-node search stops at the first key not below `k`, and otherwise moves on. -/
+@[simp] theorem slot_cons (k k' : α) (v : β) (c : BTree α β) (rest : List (α × β × BTree α β)) :
+    slot k ((k', v, c) :: rest) = if k ≤ k' then 0 else slot k rest + 1 := by
+  by_cases hk : k ≤ k' <;> simp [slot, slotM, leI, hk]
+
+/-- Lookup in a node without keys descends into its only child. -/
+@[simp] theorem lookup_node_nil (k : α) (first : BTree α β) :
+    lookup k (.node first []) = lookup k first := by
+  simp [lookup, lookupM]
+
+/-- Lookup at a node's first key: stop on equality, descend into the child before the key when
+the query is below it, and otherwise move on to the remaining keys. -/
+@[simp] theorem lookup_node_cons (k k' : α) (v : β) (first c : BTree α β)
+    (rest : List (α × β × BTree α β)) :
+    lookup k (.node first ((k', v, c) :: rest)) =
+      if k ≤ k' then (if k' ≤ k then some v else lookup k first) else lookup k (.node c rest) := by
+  by_cases h₁ : k ≤ k' <;> by_cases h₂ : k' ≤ k <;> simp [lookup, lookupM, leI, h₁, h₂]
+
+/-- Membership is success of lookup. -/
+@[simp] theorem contains_eq_isSome_lookup (k : α) : contains k tr = (lookup k tr).isSome := (rfl)
+
 /-- The pure within-node search counts the keys below `k` before the first key not below it. -/
 theorem slot_eq_length_takeWhile (k : α) (rest : List (α × β × BTree α β)) :
     slot k rest = (rest.takeWhile fun e => decide (e.1 < k)).length := by
@@ -103,6 +137,16 @@ theorem slot_eq_length_takeWhile (k : α) (rest : List (α × β × BTree α β)
     by_cases hk : k ≤ k'
     · simp [slotM, hk, not_lt.2 hk]
     · simp [slotM, hk, lt_of_not_ge hk, ih]
+
+/-- The pure within-node search is the index of the first key not below `k`; this is the form
+that insertion and rank will use. -/
+theorem slot_eq_findIdx (k : α) (rest : List (α × β × BTree α β)) :
+    slot k rest = rest.findIdx fun e => decide (k ≤ e.1) := by
+  induction rest with
+  | nil => rfl
+  | cons e rest ih =>
+    obtain ⟨k', v, c⟩ := e
+    simp [slot_cons, List.findIdx_cons, ih]
 
 /-- The position found by the within-node search is at most the number of keys. -/
 theorem slot_le_length (k : α) (rest : List (α × β × BTree α β)) : slot k rest ≤ rest.length := by
@@ -116,7 +160,6 @@ theorem slot_le_length (k : α) (rest : List (α × β × BTree α β)) : slot k
 /-- Model equation: on a tree with sorted entries, lookup is lookup in `toList`. -/
 theorem lookup_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
     lookup k tr = List.lookup k tr.toList := by
-  unfold lookup
   fun_induction lookupM (m := Id) leI (pure ()) k tr with
   | case1 => simp
   | case2 first ih => simpa using ih (by simpa using h)
@@ -124,14 +167,14 @@ theorem lookup_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
     rw [toList_node, toListRest_cons, List.cons_append] at h ⊢
     rw [toList_node] at ih₂
     obtain ⟨h₁, h₂, hlt, hgt⟩ := List.isSortedAssoc_append_cons_iff.1 h
+    rw [lookup_node_cons]
     rcases lt_trichotomy k k' with hk | rfl | hk
-    · simp only [leI, hk.le, not_le.2 hk, decide_true, decide_false, pure_bind, ite_true,
-        Bool.false_eq_true, ite_false]
-      rw [List.lookup_append_of_forall_gt fun p hp => ?_, ih₁ h₁]
+    · simp only [hk.le, not_le.2 hk, ↓reduceIte]
+      rw [ih₁ h₁, List.lookup_append_of_forall_gt fun p hp => ?_]
       rcases List.mem_cons.1 hp with rfl | hp
       exacts [hk, hk.trans (hgt p hp)]
-    · simp [leI, List.lookup_append_of_forall_lt hlt]
-    · simp only [leI, not_le.2 hk, decide_false, pure_bind, Bool.false_eq_true, ite_false]
+    · simp [List.lookup_append_of_forall_lt hlt]
+    · simp only [not_le.2 hk, ↓reduceIte]
       rw [ih₂ h₂, List.lookup_append_of_forall_lt fun p hp => (hlt p hp).trans hk,
         List.lookup_cons_of_ne hk.ne']
 
@@ -139,29 +182,38 @@ theorem lookup_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
 theorem lookup_eq (h : IsWF t tr) (k : α) : lookup k tr = List.lookup k tr.toList :=
   lookup_eq_of_isSortedAssoc h.sorted k
 
+/-- On a tree with sorted entries, membership is success of lookup in `toList`. -/
+theorem contains_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
+    contains k tr = (List.lookup k tr.toList).isSome := by
+  rw [contains_eq_isSome_lookup, lookup_eq_of_isSortedAssoc h]
+
+/-- On a tree with sorted entries, a key is in the tree exactly when it is among its keys. -/
+theorem contains_iff_mem_keys_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
+    contains k tr = true ↔ k ∈ tr.keys := by
+  simp only [contains_eq_of_isSortedAssoc h, Option.isSome_iff_exists, h.lookup_eq_some_iff,
+    mem_keys, mem_def]
+
 /-- Membership on well-formed trees is success of lookup in `toList`. -/
-theorem contains_eq (h : IsWF t tr) (k : α) : contains k tr = (List.lookup k tr.toList).isSome := by
-  rw [← lookup_eq h k]
-  rfl
+theorem contains_eq (h : IsWF t tr) (k : α) : contains k tr = (List.lookup k tr.toList).isSome :=
+  contains_eq_of_isSortedAssoc h.sorted k
 
 /-- A key is in a well-formed tree exactly when it is among the tree's keys. -/
-theorem contains_iff (h : IsWF t tr) (k : α) : contains k tr = true ↔ k ∈ tr.keys := by
-  simp only [contains_eq h, Option.isSome_iff_exists, h.sorted.lookup_eq_some_iff, mem_keys,
-    mem_def]
+theorem contains_iff_mem_keys (h : IsWF t tr) (k : α) : contains k tr = true ↔ k ∈ tr.keys :=
+  contains_iff_mem_keys_of_isSortedAssoc h.sorted k
 
 /-- Sorted but not well-formed: a two-level tree whose child has no keys. Lookup still agrees
 with the model, which is what `lookup_eq_of_isSortedAssoc` promises. -/
 example : lookup 1 (BTree.node (α := ℕ) (β := String) (.node .leaf []) [(1, "a", .leaf)]) =
-    some "a" := by decide +kernel
+    some "a" := by simp
 
 example : lookup 2 (BTree.node (α := ℕ) (β := String) .leaf [(1, "a", .leaf), (3, "c", .leaf)]) =
-    none := by decide +kernel
+    none := by simp
 
 example : slot 2 ([(1, "a", .leaf), (3, "c", .leaf)] : List (ℕ × String × BTree ℕ String)) = 1 := by
   decide
 
 example : contains 3 (BTree.node (α := ℕ) (β := String) .leaf [(1, "a", .leaf), (3, "c", .leaf)]) =
-    true := by decide +kernel
+    true := by simp
 
 end Pure
 
