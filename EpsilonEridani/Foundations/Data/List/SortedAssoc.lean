@@ -112,17 +112,29 @@ theorem isSortedAssoc_iff_pairwise : l.IsSortedAssoc ↔ (l.map Prod.fst).Pairwi
 theorem isSortedAssoc_iff_sortedLT : l.IsSortedAssoc ↔ (l.map Prod.fst).SortedLT :=
   List.sortedLT_iff_pairwise.symm
 
+/-- The entries of a sorted association list are pairwise increasing in their keys. -/
+theorem IsSortedAssoc.pairwise (h : l.IsSortedAssoc) : l.Pairwise fun p q => p.1 < q.1 :=
+  List.pairwise_map.1 h
+
+/-- The keys of a sorted association list are distinct. -/
+theorem IsSortedAssoc.nodup_keys (h : l.IsSortedAssoc) : (l.map Prod.fst).Nodup :=
+  (isSortedAssoc_iff_sortedLT.1 h).nodup
+
+/-- The entries of a sorted association list are distinct. -/
+theorem IsSortedAssoc.nodup (h : l.IsSortedAssoc) : l.Nodup :=
+  List.Nodup.of_map Prod.fst h.nodup_keys
+
 @[simp] theorem isSortedAssoc_nil : ([] : List (α × β)).IsSortedAssoc := List.Pairwise.nil
 
 /-- A sorted association list is an entry whose key is below every later key, then a sorted
 list. -/
-@[simp] theorem isSortedAssoc_cons_iff :
+@[simp, grind =] theorem isSortedAssoc_cons_iff :
     (p :: l).IsSortedAssoc ↔ (∀ q ∈ l, p.1 < q.1) ∧ l.IsSortedAssoc := by
   simp [IsSortedAssoc, List.pairwise_cons]
 
 /-- A concatenation is sorted iff both parts are and every key of the first part is below
 every key of the second. -/
-@[simp] theorem isSortedAssoc_append_iff :
+@[simp, grind =] theorem isSortedAssoc_append_iff :
     (l₁ ++ l₂).IsSortedAssoc ↔
       l₁.IsSortedAssoc ∧ l₂.IsSortedAssoc ∧ ∀ p ∈ l₁, ∀ q ∈ l₂, p.1 < q.1 := by
   simp [IsSortedAssoc, List.pairwise_append]
@@ -151,14 +163,21 @@ theorem IsSortedAssoc.filter (f : α × β → Bool) (h : l.IsSortedAssoc) :
   h.sublist List.filter_sublist
 
 /-- Keys are distinct: two entries of a sorted list with the same key are the same entry. -/
-theorem IsSortedAssoc.eq_of_mem_of_mem (h : l.IsSortedAssoc) (hp : p ∈ l) (hq : q ∈ l)
+theorem IsSortedAssoc.eq_of_fst_eq (h : l.IsSortedAssoc) (hp : p ∈ l) (hq : q ∈ l)
     (hk : p.1 = q.1) : p = q :=
-  List.inj_on_of_nodup_map (isSortedAssoc_iff_sortedLT.1 h).nodup hp hq hk
+  List.inj_on_of_nodup_map h.nodup_keys hp hq hk
+
+/-- Two sorted association lists with the same entries are equal: the model is determined by
+its membership. -/
+theorem IsSortedAssoc.eq_of_forall_mem_iff (h₁ : l₁.IsSortedAssoc) (h₂ : l₂.IsSortedAssoc)
+    (h : ∀ p, p ∈ l₁ ↔ p ∈ l₂) : l₁ = l₂ :=
+  List.Perm.eq_of_pairwise (fun _ _ _ _ hpq hqp => absurd (hpq.trans hqp) (lt_irrefl _))
+    h₁.pairwise h₂.pairwise ((List.perm_ext_iff_of_nodup h₁.nodup h₂.nodup).2 h)
 
 /-- On a sorted list, lookup finds exactly the entries present. -/
 theorem IsSortedAssoc.lookup_eq_some_iff (h : l.IsSortedAssoc) :
     List.lookup k l = some v ↔ (k, v) ∈ l :=
-  lookup_eq_some_iff_mem (isSortedAssoc_iff_sortedLT.1 h).nodup
+  lookup_eq_some_iff_mem h.nodup_keys
 
 /-- The head of a sorted association list is its entry of least key. -/
 theorem IsSortedAssoc.head?_eq_some_iff (h : l.IsSortedAssoc) :
@@ -194,7 +213,7 @@ theorem IsSortedAssoc.getLast?_eq_some_iff (h : l.IsSortedAssoc) :
   obtain ⟨b, hb⟩ : ∃ b, l.getLast? = some b :=
     Option.isSome_iff_exists.1 (by simpa using List.ne_nil_of_mem hp)
   obtain ⟨hbl, hble⟩ := aux hb
-  rw [hb, h.eq_of_mem_of_mem hbl hp (le_antisymm (hle b hbl) (hble p hp))]
+  rw [hb, h.eq_of_fst_eq hbl hp (le_antisymm (hle b hbl) (hble p hp))]
 
 end List
 
@@ -223,11 +242,11 @@ theorem erase_cons : erase k (p :: l) = if p.1 = k then erase k l else p :: eras
   rw [List.filter_cons]
   by_cases hp : p.1 = k <;> simp [hp]
 
-@[simp] theorem erase_append : erase k (l₁ ++ l₂) = erase k l₁ ++ erase k l₂ := by
+@[simp, grind =] theorem erase_append : erase k (l₁ ++ l₂) = erase k l₁ ++ erase k l₂ := by
   unfold erase
   exact List.filter_append l₁ l₂
 
-@[simp] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
+@[simp, grind =] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
   simp [erase, List.mem_filter]
 
 /-- Erasing a key that no entry carries is the identity. -/
@@ -235,7 +254,7 @@ theorem erase_of_forall_ne (h : ∀ p ∈ l, p.1 ≠ k) : erase k l = l :=
   List.filter_eq_self.2 fun p hp => by simpa using h p hp
 
 /-- Lookup of the erased key fails, on any list. -/
-@[simp] theorem lookup_erase_self : List.lookup k (erase k l) = none :=
+@[simp, grind =] theorem lookup_erase_self : List.lookup k (erase k l) = none :=
   List.lookup_eq_none_of_forall_ne fun _ hp => (mem_erase_iff.1 hp).2
 
 /-- Erasure does not change lookup at other keys, on any list. -/
@@ -254,16 +273,16 @@ theorem erase_of_forall_ne (h : ∀ p ∈ l, p.1 ≠ k) : erase k l = l :=
 
 /-- When keys are distinct, erasure removes one entry if the key is present and none
 otherwise. -/
-theorem length_erase_of_nodup (h : (l.map Prod.fst).Nodup) :
+theorem length_erase_of_nodup_keys (h : (l.map Prod.fst).Nodup) :
     (erase k l).length = if (List.lookup k l).isSome then l.length - 1 else l.length := by
   split_ifs with hk
   · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.1 hk
-    obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.1 hw
-    rw [List.map_append, List.map_cons, List.nodup_middle, List.nodup_cons, ← List.map_append]
-      at h
-    have hne : ∀ p ∈ l₁ ++ l₂, p.1 ≠ k := fun p hp hpk => h.1 (List.mem_map.2 ⟨p, hp, hpk⟩)
-    rw [erase_append, erase_cons, erase_of_forall_ne fun p hp => hne p (List.mem_append_left _ hp),
-      erase_of_forall_ne fun p hp => hne p (List.mem_append_right _ hp)]
+    obtain ⟨l₁, l₂, rfl, hl₁⟩ := List.lookup_eq_some_iff.1 hw
+    have h₂ : k ∉ l₂.map Prod.fst := by
+      rw [List.map_append, List.map_cons] at h
+      exact (List.nodup_cons.1 h.of_append_right).1
+    rw [erase_append, erase_cons, erase_of_forall_ne fun p hp => (bne_iff_ne.1 (hl₁ p hp)).symm,
+      erase_of_forall_ne fun p hp hpk => h₂ (List.mem_map.2 ⟨p, hp, hpk⟩)]
     simp
   · rw [erase_of_lookup_eq_none (Option.not_isSome_iff_eq_none.1 hk)]
 
@@ -316,7 +335,7 @@ theorem eq_or_mem_of_mem_insert (hq : q ∈ insert k v l) : q = (k, v) ∨ q ∈
   | nil => simpa using hq
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    simp only [insert] at hq
+    rw [insert_cons] at hq
     split_ifs at hq with h₁ h₂
     · simpa using hq
     · rcases List.mem_cons.1 hq with rfl | hq
@@ -335,7 +354,7 @@ theorem isSortedAssoc_insert (h : l.IsSortedAssoc) : (insert k v l).IsSortedAsso
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
     rw [List.isSortedAssoc_cons_iff] at h
-    simp only [insert]
+    rw [insert_cons]
     split_ifs with h₁ h₂
     · rw [List.isSortedAssoc_cons_iff, List.isSortedAssoc_cons_iff]
       refine ⟨fun q hq => ?_, h⟩
@@ -357,7 +376,7 @@ theorem mem_insert_self : (k, v) ∈ insert k v l := by
   | nil => simp
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    simp only [insert]
+    rw [insert_cons]
     split_ifs
     · exact List.mem_cons_self ..
     · exact List.mem_cons_self ..
@@ -369,7 +388,7 @@ theorem mem_insert_of_mem (hq : q ∈ l) (hne : q.1 ≠ k) : q ∈ insert k v l 
   | nil => simp at hq
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    simp only [insert]
+    rw [insert_cons]
     split_ifs with h₁ h₂
     · exact List.mem_cons_of_mem _ hq
     · rcases List.mem_cons.1 hq with rfl | hq'
@@ -388,19 +407,19 @@ other keys. -/
     rcases eq_or_mem_of_mem_insert hq with rfl | hql
     · exact Or.inl rfl
     · by_cases hk : q.1 = k
-      · exact Or.inl ((isSortedAssoc_insert h).eq_of_mem_of_mem hq mem_insert_self hk)
+      · exact Or.inl ((isSortedAssoc_insert h).eq_of_fst_eq hq mem_insert_self hk)
       · exact Or.inr ⟨hql, hk⟩
   · rintro (rfl | ⟨hql, hk⟩)
     · exact mem_insert_self
     · exact mem_insert_of_mem hql hk
 
 /-- Lookup of the inserted key finds the new value, on any list. -/
-@[simp] theorem lookup_insert_self : List.lookup k (insert k v l) = some v := by
+@[simp, grind =] theorem lookup_insert_self : List.lookup k (insert k v l) = some v := by
   induction l with
   | nil => simp
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    simp only [insert]
+    rw [insert_cons]
     split_ifs with h₁ h₂
     · simp
     · simp
@@ -413,7 +432,7 @@ other keys. -/
   | nil => simp [List.lookup_cons_of_ne hne]
   | cons a l ih =>
     obtain ⟨a₁, a₂⟩ := a
-    simp only [insert]
+    rw [insert_cons]
     split_ifs with h₁ h₂
     · rw [List.lookup_cons_of_ne hne]
     · subst h₂
@@ -438,11 +457,11 @@ theorem length_insert (h : l.IsSortedAssoc) :
         rcases List.mem_cons.1 hp with rfl | hp
         · exact h₁.ne'
         · exact (h₁.trans (h.1 p hp)).ne'
-      simp [insert, h₁, hnone]
+      simp [insert_cons, h₁, hnone]
     · by_cases h₂ : k = a₁
       · subst h₂
-        simp [insert]
-      · simp only [insert, h₁, h₂, ↓reduceIte, List.length_cons, ih h.2,
+        simp [insert_cons]
+      · simp only [insert_cons, h₁, h₂, ↓reduceIte, List.length_cons, ih h.2,
           List.lookup_cons_of_ne h₂]
         split_ifs <;> rfl
 
@@ -480,7 +499,7 @@ theorem isSortedAssoc_erase (h : l.IsSortedAssoc) : (erase k l).IsSortedAssoc :=
 /-- On a sorted list, erasure removes one entry if the key was present and none otherwise. -/
 theorem length_erase (h : l.IsSortedAssoc) :
     (erase k l).length = if (List.lookup k l).isSome then l.length - 1 else l.length :=
-  length_erase_of_nodup (List.isSortedAssoc_iff_sortedLT.1 h).nodup
+  length_erase_of_nodup_keys h.nodup_keys
 
 /-! ### Predecessor and successor -/
 
@@ -493,19 +512,19 @@ theorem succ?_def : succ? k l = (l.filter fun p => k < p.1).head? := rfl
 @[simp] theorem succ?_nil : succ? k ([] : List (α × β)) = none := rfl
 
 /-- The predecessor in a concatenation is the predecessor in the suffix, else in the prefix. -/
-@[simp] theorem pred?_append : pred? k (l₁ ++ l₂) = (pred? k l₂).or (pred? k l₁) := by
+@[simp, grind =] theorem pred?_append : pred? k (l₁ ++ l₂) = (pred? k l₂).or (pred? k l₁) := by
   simp [pred?, List.filter_append, List.getLast?_append]
 
 /-- The successor in a concatenation is the successor in the prefix, else in the suffix. -/
-@[simp] theorem succ?_append : succ? k (l₁ ++ l₂) = (succ? k l₁).or (succ? k l₂) := by
+@[simp, grind =] theorem succ?_append : succ? k (l₁ ++ l₂) = (succ? k l₁).or (succ? k l₂) := by
   simp [succ?, List.filter_append, List.head?_append]
 
 /-- There is no predecessor iff every key is at least `k`, on any list. -/
-@[simp] theorem pred?_eq_none_iff : pred? k l = none ↔ ∀ q ∈ l, k ≤ q.1 := by
+@[simp, grind =] theorem pred?_eq_none_iff : pred? k l = none ↔ ∀ q ∈ l, k ≤ q.1 := by
   simp [pred?]
 
 /-- There is no successor iff every key is at most `k`, on any list. -/
-@[simp] theorem succ?_eq_none_iff : succ? k l = none ↔ ∀ q ∈ l, q.1 ≤ k := by
+@[simp, grind =] theorem succ?_eq_none_iff : succ? k l = none ↔ ∀ q ∈ l, q.1 ≤ k := by
   simp [succ?]
 
 /-- On a sorted list, `pred? k` is the greatest entry with key below `k`. -/
@@ -531,7 +550,7 @@ theorem rank_def : rank k l = (l.filter fun p => p.1 < k).length := rfl
 @[simp] theorem rank_nil : rank k ([] : List (α × β)) = 0 := rfl
 
 /-- An entry is in the range restriction iff it is in the list with key in `[lo, hi]`. -/
-@[simp] theorem mem_range_iff {lo hi : α} :
+@[simp, grind =] theorem mem_range_iff {lo hi : α} :
     p ∈ range lo hi l ↔ p ∈ l ∧ lo ≤ p.1 ∧ p.1 ≤ hi := by
   simp [range, List.mem_filter]
 
@@ -541,13 +560,13 @@ theorem isSortedAssoc_range {lo hi : α} (h : l.IsSortedAssoc) :
   h.filter _
 
 /-- Range restriction distributes over concatenation. -/
-@[simp] theorem range_append {lo hi : α} :
+@[simp, grind =] theorem range_append {lo hi : α} :
     range lo hi (l₁ ++ l₂) = range lo hi l₁ ++ range lo hi l₂ := by
   unfold range
   exact List.filter_append l₁ l₂
 
 /-- Rank is additive over concatenation. -/
-@[simp] theorem rank_append : rank k (l₁ ++ l₂) = rank k l₁ + rank k l₂ := by
+@[simp, grind =] theorem rank_append : rank k (l₁ ++ l₂) = rank k l₁ + rank k l₂ := by
   simp [rank, List.filter_append]
 
 /-- On a sorted list, the rank is the length of the prefix of keys below `k`. -/
