@@ -6,7 +6,7 @@ Authors: Jesse Alama
 
 module
 
-public import EpsilonEridani.Algorithms.Lean.BTree.Defs
+public import EpsilonEridani.Algorithms.Lean.BTree.Basic
 public import Mathlib.Data.Nat.Log
 import Mathlib.Algebra.Order.BigOperators.Group.List
 import Mathlib.Algebra.Order.Group.Nat
