@@ -24,7 +24,7 @@ one more than its tallest child. Well-formedness at minimum degree `t` is the hy
 `2 * t - 1` keys (`Occupied`), a non-leaf root has between `1` and `2 * t - 1` keys, all leaves
 are at the same depth (`Balanced`), and `toList` is key-sorted. Taking `t = 2` gives 2-3-4 trees.
 
-`inductionOn` is the induction principle for the nested type; proofs use it rather than the raw
+`induction_on` is the induction principle for the nested type; proofs use it rather than the raw
 nested recursor. The Boolean checkers `occupied`, `balanced` and `isWF` decide the predicates,
 so that well-formedness of concrete trees is checked by `decide`. The operations and checkers are
 `@[expose]`d so that `decide` and `rfl` evaluate them from other modules.
@@ -133,7 +133,7 @@ structure IsWF [LinearOrder α] (t : ℕ) (tr : BTree α β) : Prop where
   /-- A non-empty root has at least one key. -/
   rootKeys_pos : tr ≠ .leaf → 1 ≤ tr.rootKeys
   /-- Every child of the root is occupied. -/
-  children : ∀ c ∈ tr.children, Occupied t c
+  occupied_of_mem_children : ∀ c ∈ tr.children, Occupied t c
   /-- All leaves are at the same depth. -/
   balanced : Balanced tr
   /-- The entries are sorted by strictly increasing key. -/
@@ -188,6 +188,9 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
 @[simp] theorem toListRest_cons :
     toListRest ((k, v, c) :: rest) = (k, v) :: c.toList ++ toListRest rest := rfl
 
+/-- The empty tree has size `0`. -/
+@[simp] theorem size_leaf : (leaf : BTree α β).size = 0 := rfl
+
 /-- The empty tree has height `0`. -/
 @[simp] theorem height_leaf : (leaf : BTree α β).height = 0 := rfl
 
@@ -209,6 +212,13 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
 @[simp] theorem map_node (f : β → γ) :
     (node first rest).map f = node (first.map f) (mapRest f rest) := rfl
 
+/-- Mapping an empty list of triples gives the empty list. -/
+@[simp] theorem mapRest_nil (f : β → γ) : mapRest f ([] : List (α × β × BTree α β)) = [] := rfl
+
+/-- Mapping a list of triples maps the value and the child of its head, then the rest. -/
+@[simp] theorem mapRest_cons (f : β → γ) :
+    mapRest f ((k, v, c) :: rest) = (k, f v, c.map f) :: mapRest f rest := rfl
+
 /-- The empty tree has no children. -/
 @[simp] theorem children_leaf : (leaf : BTree α β).children = [] := rfl
 
@@ -223,18 +233,18 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
 
 end Equations
 
-variable {tr c : BTree α β}
+variable {tr : BTree α β}
 
 /-! ### Induction -/
 
 /-- Induction on B-trees, with a hypothesis for the first child and for every child among the
 triples. This replaces the raw nested recursor in proofs. -/
-theorem inductionOn {motive : BTree α β → Prop} (leaf : motive .leaf)
+theorem induction_on {motive : BTree α β → Prop} (leaf : motive .leaf)
     (node : ∀ first rest, motive first → (∀ e ∈ rest, motive e.2.2) → motive (.node first rest)) :
     ∀ tr, motive tr
   | .leaf => leaf
   | .node first rest =>
-    node first rest (inductionOn leaf node first) fun e _ => inductionOn leaf node e.2.2
+    node first rest (induction_on leaf node first) fun e _ => induction_on leaf node e.2.2
 termination_by tr => sizeOf tr
 decreasing_by
   · simp_wf
@@ -245,10 +255,15 @@ decreasing_by
     simp_wf
     omega
 
+attribute [induction_eliminator] induction_on
+
 /-! ### Basic API -/
 
 /-- Membership in a tree is membership in its entries. -/
-theorem mem_iff {p : α × β} : p ∈ tr ↔ p ∈ tr.toList := Iff.rfl
+@[simp] theorem mem_def {p : α × β} : p ∈ tr ↔ p ∈ tr.toList := Iff.rfl
+
+/-- The length of the entries is the size. -/
+@[simp] theorem length_toList : tr.toList.length = tr.size := rfl
 
 /-- `foldl` is the fold over `toList`. -/
 theorem foldl_eq (f : γ → α × β → γ) (init : γ) : tr.foldl f init = tr.toList.foldl f init :=
@@ -261,8 +276,9 @@ theorem height_eq_zero_iff : tr.height = 0 ↔ tr = .leaf := by
   | node first rest => simp
 
 /-- Mapping over values maps the entries, keeping keys. -/
-theorem toList_map (f : β → γ) : (tr.map f).toList = tr.toList.map fun p => (p.1, f p.2) := by
-  induction tr using inductionOn with
+@[simp] theorem toList_map (f : β → γ) :
+    (tr.map f).toList = tr.toList.map fun p => (p.1, f p.2) := by
+  induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
     rw [map_node, toList_node, toList_node, List.map_append, ih₁]
@@ -271,13 +287,11 @@ theorem toList_map (f : β → γ) : (tr.map f).toList = tr.toList.map fun p => 
     | nil => rfl
     | cons e rest ih =>
       obtain ⟨k, v, c⟩ := e
-      change toListRest ((k, f v, c.map f) :: mapRest f rest) = _
-      rw [toListRest_cons, toListRest_cons, List.cons_append, List.cons_append, List.map_cons,
-        List.map_append, ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
 
 /-- Mapping over values keeps the height. -/
 @[simp] theorem height_map (f : β → γ) : (tr.map f).height = tr.height := by
-  induction tr using inductionOn with
+  induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
     rw [map_node, height_node, height_node, ih₁]
@@ -286,17 +300,75 @@ theorem toList_map (f : β → γ) : (tr.map f).toList = tr.toList.map fun p => 
     | nil => rfl
     | cons e rest ih =>
       obtain ⟨k, v, c⟩ := e
-      change heightRest ((k, f v, c.map f) :: mapRest f rest) = _
-      rw [heightRest_cons, heightRest_cons, ih₂ _ List.mem_cons_self,
-        ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
 
 /-- Mapping over values keeps the size. -/
 @[simp] theorem size_map (f : β → γ) : (tr.map f).size = tr.size := by
-  simp [size, toList_map]
+  simp [← length_toList]
 
 /-- Mapping over values keeps the keys. -/
 @[simp] theorem keys_map (f : β → γ) : (tr.map f).keys = tr.keys := by
-  simp [keys, toList_map, Function.comp_def]
+  simp [keys, Function.comp_def]
+
+/-- Mapping the identity leaves the tree unchanged. -/
+@[simp] theorem map_id : tr.map id = tr := by
+  induction tr with
+  | leaf => rfl
+  | node first rest ih₁ ih₂ =>
+    rw [map_node, ih₁]
+    congr 1
+    induction rest with
+    | nil => rfl
+    | cons e rest ih =>
+      obtain ⟨k, v, c⟩ := e
+      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+
+/-- Mapping twice is mapping the composition. -/
+@[simp] theorem map_map {δ : Type*} (g : γ → δ) (f : β → γ) :
+    (tr.map f).map g = tr.map (g ∘ f) := by
+  induction tr with
+  | leaf => rfl
+  | node first rest ih₁ ih₂ =>
+    rw [map_node, map_node, map_node, ih₁]
+    congr 1
+    induction rest with
+    | nil => rfl
+    | cons e rest ih =>
+      obtain ⟨k, v, c⟩ := e
+      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+
+/-- The entries of a concatenation of triple lists are the concatenated entries. -/
+@[simp] theorem toListRest_append {l₁ l₂ : List (α × β × BTree α β)} :
+    toListRest (l₁ ++ l₂) = toListRest l₁ ++ toListRest l₂ := by
+  induction l₁ with
+  | nil => rfl
+  | cons e l₁ ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp [ih]
+
+/-- The entries of a child among the triples form a sublist of the triples' entries. -/
+theorem toList_sublist_toListRest_of_mem {rest : List (α × β × BTree α β)}
+    {e : α × β × BTree α β} (he : e ∈ rest) : e.2.2.toList.Sublist (toListRest rest) := by
+  induction rest with
+  | nil => simp at he
+  | cons e' rest ih =>
+    obtain ⟨k, v, c'⟩ := e'
+    rw [toListRest_cons, List.cons_append]
+    rcases List.mem_cons.1 he with rfl | he
+    · exact (List.sublist_append_left _ _).cons _
+    · exact ((ih he).trans (List.sublist_append_right _ _)).cons _
+
+/-- The entries of a child of the root form a sublist of the tree's entries. -/
+theorem toList_sublist_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
+    c.toList.Sublist tr.toList := by
+  cases tr with
+  | leaf => simp at hc
+  | node first rest =>
+    simp only [children_node, List.mem_cons, List.mem_map] at hc
+    rw [toList_node]
+    rcases hc with rfl | ⟨e, he, rfl⟩
+    · exact List.sublist_append_left _ _
+    · exact (toList_sublist_toListRest_of_mem he).trans (List.sublist_append_right _ _)
 
 /-! ### Inversion lemmas -/
 
@@ -304,12 +376,16 @@ section Inversion
 
 variable {fst : BTree α β} {rest : List (α × β × BTree α β)} {t : ℕ}
 
+/-- Every child among the triples of a balanced node has the height of the first child. -/
+theorem Balanced.height_of_mem_rest (h : Balanced (.node fst rest)) {e : α × β × BTree α β}
+    (he : e ∈ rest) : e.2.2.height = fst.height := by
+  cases h with
+  | node _ _ h => exact h e he
+
 /-- A balanced node is one taller than its first child. -/
 theorem Balanced.height_node (h : Balanced (.node fst rest)) :
     (BTree.node fst rest).height = fst.height + 1 := by
-  have hh : ∀ e ∈ rest, e.2.2.height = fst.height := by
-    cases h
-    assumption
+  have hh : ∀ e ∈ rest, e.2.2.height = fst.height := fun _ => h.height_of_mem_rest
   clear h
   rw [BTree.height_node]
   suffices heightRest rest ≤ fst.height + 1 by omega
@@ -359,11 +435,18 @@ end Inversion
 
 section LinearOrder
 
-variable [LinearOrder α] {t : ℕ}
+variable [LinearOrder α] {t : ℕ} {c : BTree α β}
 
-/-- Every child of a well-formed tree is occupied. -/
-theorem IsWF.occupied_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : Occupied t c :=
-  h.children c hc
+/-- The first child of a well-formed node is occupied. -/
+theorem IsWF.occupied_first {first : BTree α β} {rest : List (α × β × BTree α β)}
+    (h : IsWF t (node first rest)) : Occupied t first :=
+  h.occupied_of_mem_children first List.mem_cons_self
+
+/-- Every child among the triples of a well-formed node is occupied. -/
+theorem IsWF.occupied_of_mem_rest {first : BTree α β} {rest : List (α × β × BTree α β)}
+    {e : α × β × BTree α β} (h : IsWF t (node first rest)) (he : e ∈ rest) :
+    Occupied t e.2.2 :=
+  h.occupied_of_mem_children _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))
 
 /-- Every child of a well-formed tree is one shorter than the tree. -/
 theorem IsWF.height_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
@@ -376,8 +459,7 @@ theorem IsWF.height_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
     simp only [children_node, List.mem_cons, List.mem_map] at hc
     rcases hc with rfl | ⟨e, he, rfl⟩
     · rfl
-    · cases hb with
-      | node _ _ hh => rw [hh e he]
+    · rw [hb.height_of_mem_rest he]
 
 /-- Every child of a well-formed tree is balanced. -/
 theorem IsWF.balanced_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : Balanced c := by
@@ -391,25 +473,8 @@ theorem IsWF.balanced_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
 
 /-- Every child of a well-formed tree has sorted entries. -/
 theorem IsWF.sorted_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
-    c.toList.IsSortedAssoc := by
-  refine h.sorted.sublist ?_
-  clear h
-  cases tr with
-  | leaf => simp at hc
-  | node first rest =>
-    simp only [children_node, List.mem_cons, List.mem_map] at hc
-    rw [toList_node]
-    rcases hc with rfl | ⟨e, he, rfl⟩
-    · exact List.sublist_append_left _ _
-    · refine List.Sublist.trans ?_ (List.sublist_append_right _ _)
-      induction rest with
-      | nil => simp at he
-      | cons e' rest ih =>
-        obtain ⟨k, v, c'⟩ := e'
-        rw [toListRest_cons, List.cons_append]
-        rcases List.mem_cons.1 he with rfl | he
-        · exact (List.sublist_append_left _ _).cons _
-        · exact ((ih he).trans (List.sublist_append_right _ _)).cons _
+    c.toList.IsSortedAssoc :=
+  h.sorted.sublist (toList_sublist_of_mem_children hc)
 
 end LinearOrder
 
@@ -419,7 +484,8 @@ section Decidability
 
 variable {rest : List (α × β × BTree α β)} {t n : ℕ}
 
-private theorem occupiedRest_eq_all :
+/-- `occupiedRest` checks every child among the triples with `occupied`. -/
+@[simp] theorem occupiedRest_eq_all :
     occupiedRest t rest = rest.all fun e => occupied t e.2.2 := by
   induction rest with
   | nil => rfl
@@ -427,7 +493,8 @@ private theorem occupiedRest_eq_all :
     obtain ⟨k, v, c⟩ := e
     simp [occupiedRest, ih]
 
-private theorem balancedRest_eq_all :
+/-- `balancedRest n` checks that every child among the triples is balanced and of height `n`. -/
+@[simp] theorem balancedRest_eq_all :
     balancedRest n rest = rest.all fun e => balanced e.2.2 && e.2.2.height == n := by
   induction rest with
   | nil => rfl
@@ -436,8 +503,8 @@ private theorem balancedRest_eq_all :
     simp [balancedRest, ih, Bool.and_assoc]
 
 /-- `occupied` decides `Occupied`. -/
-theorem occupied_iff : occupied t tr = true ↔ Occupied t tr := by
-  induction tr using inductionOn with
+@[simp] theorem occupied_iff : occupied t tr = true ↔ Occupied t tr := by
+  induction tr with
   | leaf => exact ⟨fun _ => .leaf, fun _ => rfl⟩
   | node first rest ih₁ ih₂ =>
     rw [occupied, occupiedRest_eq_all]
@@ -450,8 +517,8 @@ theorem occupied_iff : occupied t tr = true ↔ Occupied t tr := by
       | node h₁ h₂ h₃ h₄ => exact ⟨⟨⟨h₁, h₂⟩, h₃⟩, fun e he => (ih₂ e he).2 (h₄ e he)⟩
 
 /-- `balanced` decides `Balanced`. -/
-theorem balanced_iff : balanced tr = true ↔ Balanced tr := by
-  induction tr using inductionOn with
+@[simp] theorem balanced_iff : balanced tr = true ↔ Balanced tr := by
+  induction tr with
   | leaf => exact ⟨fun _ => .leaf, fun _ => rfl⟩
   | node first rest ih₁ ih₂ =>
     rw [balanced, balancedRest_eq_all]
@@ -464,7 +531,7 @@ theorem balanced_iff : balanced tr = true ↔ Balanced tr := by
       | node h₁ h₂ h₃ => exact ⟨h₁, fun e he => ⟨(ih₂ e he).2 (h₂ e he), h₃ e he⟩⟩
 
 /-- `isWF` decides `IsWF`. -/
-theorem isWF_iff [LinearOrder α] : isWF t tr = true ↔ IsWF t tr := by
+@[simp] theorem isWF_iff [LinearOrder α] : isWF t tr = true ↔ IsWF t tr := by
   simp only [isWF, Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, List.all_eq_true,
     occupied_iff, balanced_iff]
   constructor
@@ -474,7 +541,7 @@ theorem isWF_iff [LinearOrder α] : isWF t tr = true ↔ IsWF t tr := by
     | leaf => exact absurd rfl hne
     | node => simpa using h₃
   · intro h
-    refine ⟨⟨⟨⟨⟨h.two_le, h.rootKeys_le⟩, ?_⟩, h.children⟩, h.balanced⟩,
+    refine ⟨⟨⟨⟨⟨h.two_le, h.rootKeys_le⟩, ?_⟩, h.occupied_of_mem_children⟩, h.balanced⟩,
       List.isSortedAssoc_iff_pairwise.1 h.sorted⟩
     cases tr with
     | leaf => simp
@@ -499,6 +566,11 @@ example (t : ℕ) :
     ¬ IsWF t (BTree.node (α := ℕ) (β := Unit)
       (.node .leaf [(0, (), .leaf)]) [(1, (), .leaf)]) :=
   fun h => absurd h.balanced (by decide)
+
+/-- Children of different heights violate equal leaf depth. -/
+example :
+    ¬ IsWF 2 (BTree.node (α := ℕ) (β := Unit) (.node .leaf [(0, (), .leaf)]) [(1, (), .leaf)]) := by
+  decide
 
 /-- A root with two keys and three leaf children is well-formed at `t = 3`. -/
 example : IsWF 3 (BTree.node (α := ℕ) (β := String) .leaf [(1, "a", .leaf), (2, "b", .leaf)]) := by
