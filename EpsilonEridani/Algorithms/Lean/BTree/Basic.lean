@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Foundations.Data.List.SortedAssoc
+import Mathlib.Algebra.BigOperators.Group.List.Basic
 
 /-!
 # Classic B-trees
@@ -186,11 +187,20 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
 @[simp] theorem toList_node : (node first rest).toList = first.toList ++ toListRest rest := rfl
 
 /-- An empty list of triples has no entries. -/
-@[simp] theorem toListRest_nil : toListRest ([] : List (α × β × BTree α β)) = [] := rfl
+theorem toListRest_nil : toListRest ([] : List (α × β × BTree α β)) = [] := rfl
 
 /-- The entries of a list of triples: the key, its child's entries, then the rest. -/
-@[simp] theorem toListRest_cons :
+theorem toListRest_cons :
     toListRest ((k, v, c) :: rest) = (k, v) :: c.toList ++ toListRest rest := rfl
+
+/-- The entries of a list of triples: each key-value pair followed by its child's entries. -/
+@[simp] theorem toListRest_eq_flatMap :
+    toListRest rest = rest.flatMap fun e => (e.1, e.2.1) :: e.2.2.toList := by
+  induction rest with
+  | nil => rfl
+  | cons e rest ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp [toListRest_cons, ih]
 
 /-- The empty tree has size `0`. -/
 @[simp] theorem size_leaf : (leaf : BTree α β).size = 0 := rfl
@@ -203,11 +213,30 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
     (node first rest).height = max (first.height + 1) (heightRest rest) := rfl
 
 /-- An empty list of triples contributes height `0`. -/
-@[simp] theorem heightRest_nil : heightRest ([] : List (α × β × BTree α β)) = 0 := rfl
+theorem heightRest_nil : heightRest ([] : List (α × β × BTree α β)) = 0 := rfl
 
 /-- The height contribution of a list of triples is that of its tallest child. -/
-@[simp] theorem heightRest_cons :
+theorem heightRest_cons :
     heightRest ((k, v, c) :: rest) = max (c.height + 1) (heightRest rest) := rfl
+
+/-- The height contribution of a list of triples is the maximum of its children's heights plus
+one, or `0` for the empty list. -/
+@[simp] theorem heightRest_eq_foldr :
+    heightRest rest = (rest.map fun e => e.2.2.height + 1).foldr max 0 := by
+  induction rest with
+  | nil => rfl
+  | cons e rest ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp [heightRest_cons, ih]
+
+/-- The children among a list of triples are all shorter than `n` exactly when the list's height
+contribution is at most `n`. -/
+theorem heightRest_le_iff {n : ℕ} : heightRest rest ≤ n ↔ ∀ e ∈ rest, e.2.2.height + 1 ≤ n := by
+  induction rest with
+  | nil => simp
+  | cons e rest ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp only [heightRest_cons, max_le_iff, ih, List.forall_mem_cons]
 
 /-- Mapping the empty tree gives the empty tree. -/
 @[simp] theorem map_leaf (f : β → γ) : (leaf : BTree α β).map f = leaf := rfl
@@ -217,28 +246,20 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
     (node first rest).map f = node (first.map f) (mapRest f rest) := rfl
 
 /-- Mapping an empty list of triples gives the empty list. -/
-@[simp] theorem mapRest_nil (f : β → γ) : mapRest f ([] : List (α × β × BTree α β)) = [] := rfl
+theorem mapRest_nil (f : β → γ) : mapRest f ([] : List (α × β × BTree α β)) = [] := rfl
 
 /-- Mapping a list of triples maps the value and the child of its head, then the rest. -/
-@[simp] theorem mapRest_cons (f : β → γ) :
+theorem mapRest_cons (f : β → γ) :
     mapRest f ((k, v, c) :: rest) = (k, f v, c.map f) :: mapRest f rest := rfl
 
-/-- Mapping a list of triples keeps its length. -/
-@[simp] theorem length_mapRest (f : β → γ) : (mapRest f rest).length = rest.length := by
+/-- Mapping a list of triples maps the value and the child of each triple, keeping its key. -/
+@[simp] theorem mapRest_eq_map (f : β → γ) :
+    mapRest f rest = rest.map fun e => (e.1, f e.2.1, e.2.2.map f) := by
   induction rest with
   | nil => rfl
   | cons e rest ih =>
     obtain ⟨k, v, c⟩ := e
-    simp [ih]
-
-/-- A triple belongs to a mapped list of triples when it is the image of a triple of the list. -/
-theorem mem_mapRest_iff (f : β → γ) {e : α × γ × BTree α γ} :
-    e ∈ mapRest f rest ↔ ∃ e' ∈ rest, (e'.1, f e'.2.1, e'.2.2.map f) = e := by
-  induction rest with
-  | nil => simp
-  | cons e' rest ih =>
-    obtain ⟨k, v, c⟩ := e'
-    simp [ih, eq_comm]
+    simp [mapRest_cons, ih]
 
 /-- The empty tree has no children. -/
 @[simp] theorem children_leaf : (leaf : BTree α β).children = [] := rfl
@@ -287,15 +308,9 @@ attribute [induction_eliminator] induction
 @[simp] theorem length_toList : tr.toList.length = tr.size := rfl
 
 /-- The entries of a list of triples: one per key, plus those of the children. -/
-@[simp] theorem length_toListRest {rest : List (α × β × BTree α β)} :
+theorem length_toListRest {rest : List (α × β × BTree α β)} :
     (toListRest rest).length = rest.length + (rest.map fun e => e.2.2.size).sum := by
-  induction rest with
-  | nil => rfl
-  | cons e rest ih =>
-    obtain ⟨k, v, c⟩ := e
-    simp only [toListRest_cons, List.length_cons, List.length_append, ih, List.map_cons,
-      List.sum_cons, length_toList]
-    omega
+  simp [List.length_flatMap, List.sum_map_add, Nat.add_comm]
 
 /-- The size of a node: its first child's, one per key, and its other children's. -/
 theorem size_node {first : BTree α β} {rest : List (α × β × BTree α β)} :
@@ -304,7 +319,7 @@ theorem size_node {first : BTree α β} {rest : List (α × β × BTree α β)} 
     Nat.add_assoc]
 
 /-- `foldl` is the fold over `toList`. -/
-theorem foldl_eq (f : γ → α × β → γ) (init : γ) : tr.foldl f init = tr.toList.foldl f init :=
+theorem foldl_def (f : γ → α × β → γ) (init : γ) : tr.foldl f init = tr.toList.foldl f init :=
   rfl
 
 /-- `keys` is the list of first components of `toList`. -/
@@ -331,26 +346,17 @@ theorem keys_def : tr.keys = tr.toList.map Prod.fst := rfl
   induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
-    rw [map_node, toList_node, toList_node, List.map_append, ih₁]
-    congr 1
-    induction rest with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨k, v, c⟩ := e
-      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+    simp only [map_node, toList_node, toListRest_eq_flatMap, mapRest_eq_map, List.map_append, ih₁,
+      List.flatMap_map, List.map_flatMap, List.map_cons]
+    exact congrArg _ (List.flatMap_congr fun e he => by rw [ih₂ e he])
 
 /-- Mapping over values keeps the height. -/
 @[simp] theorem height_map (f : β → γ) : (tr.map f).height = tr.height := by
   induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
-    rw [map_node, height_node, height_node, ih₁]
-    congr 1
-    induction rest with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨k, v, c⟩ := e
-      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+    simp only [map_node, height_node, heightRest_eq_foldr, mapRest_eq_map, ih₁, List.map_map]
+    exact congrArg _ (congrArg _ (List.map_congr_left fun e he => by simp [ih₂ e he]))
 
 /-- Mapping over values keeps the size. -/
 @[simp] theorem size_map (f : β → γ) : (tr.map f).size = tr.size := by
@@ -373,25 +379,16 @@ theorem keys_def : tr.keys = tr.toList.map Prod.fst := rfl
   cases tr with
   | leaf => rfl
   | node first rest =>
-    simp only [map_node, children_node, List.map_cons, List.map_map, List.cons.injEq, true_and]
-    induction rest with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨k, v, c⟩ := e
-      simp [ih]
+    simp [Function.comp_def]
 
 /-- Mapping the identity leaves the tree unchanged. -/
 @[simp] theorem map_id : tr.map id = tr := by
   induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
-    rw [map_node, ih₁]
-    congr 1
-    induction rest with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨k, v, c⟩ := e
-      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+    rw [map_node, ih₁, mapRest_eq_map]
+    exact congrArg _ ((List.map_congr_left (g := fun e => e) fun e he => by simp [ih₂ e he]).trans
+      (List.map_id' rest))
 
 /-- Mapping twice is mapping the composition. -/
 @[simp] theorem map_map {δ : Type*} (g : γ → δ) (f : β → γ) :
@@ -399,34 +396,19 @@ theorem keys_def : tr.keys = tr.toList.map Prod.fst := rfl
   induction tr with
   | leaf => rfl
   | node first rest ih₁ ih₂ =>
-    rw [map_node, map_node, map_node, ih₁]
-    congr 1
-    induction rest with
-    | nil => rfl
-    | cons e rest ih =>
-      obtain ⟨k, v, c⟩ := e
-      simp [ih₂ _ List.mem_cons_self, ih fun e he => ih₂ e (List.mem_cons_of_mem _ he)]
+    simp only [map_node, ih₁, mapRest_eq_map, List.map_map]
+    exact congrArg _ (List.map_congr_left fun e he => by simp [ih₂ e he])
 
 /-- The entries of a concatenation of triple lists are the concatenated entries. -/
-@[simp] theorem toListRest_append {l₁ l₂ : List (α × β × BTree α β)} :
+theorem toListRest_append {l₁ l₂ : List (α × β × BTree α β)} :
     toListRest (l₁ ++ l₂) = toListRest l₁ ++ toListRest l₂ := by
-  induction l₁ with
-  | nil => rfl
-  | cons e l₁ ih =>
-    obtain ⟨k, v, c⟩ := e
-    simp [ih]
+  simp [List.flatMap_append]
 
 /-- The entries of a child among the triples form a sublist of the triples' entries. -/
 theorem toList_sublist_toListRest_of_mem {rest : List (α × β × BTree α β)}
     {e : α × β × BTree α β} (he : e ∈ rest) : e.2.2.toList.Sublist (toListRest rest) := by
-  induction rest with
-  | nil => simp at he
-  | cons e' rest ih =>
-    obtain ⟨k, v, c'⟩ := e'
-    rw [toListRest_cons, List.cons_append]
-    rcases List.mem_cons.1 he with rfl | he
-    · exact (List.sublist_append_left _ _).cons _
-    · exact ((ih he).trans (List.sublist_append_right _ _)).cons _
+  rw [toListRest_eq_flatMap]
+  exact (List.sublist_cons_self _ _).trans (List.sublist_flatten_of_mem (List.mem_map_of_mem he))
 
 /-- The entries of a child of the root form a sublist of the tree's entries. -/
 theorem toList_sublist_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
@@ -443,18 +425,9 @@ theorem toList_sublist_of_mem_children {c : BTree α β} (hc : c ∈ tr.children
 /-- Every child among the triples of a node is shorter than the node. -/
 theorem height_succ_le_of_mem_rest {first : BTree α β} {rest : List (α × β × BTree α β)}
     {e : α × β × BTree α β} (he : e ∈ rest) : e.2.2.height + 1 ≤ (node first rest).height := by
+  have := heightRest_le_iff.1 le_rfl e he
   rw [height_node]
-  suffices e.2.2.height + 1 ≤ heightRest rest by omega
-  induction rest with
-  | nil => simp at he
-  | cons e' rest ih =>
-    obtain ⟨k, v, c'⟩ := e'
-    rw [heightRest_cons]
-    rcases List.mem_cons.1 he with rfl | he
-    · dsimp only
-      omega
-    · have := ih he
-      omega
+  omega
 
 /-- Every child of a tree is shorter than the tree. -/
 theorem height_succ_le_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
@@ -483,19 +456,9 @@ theorem Balanced.height_of_mem_rest (h : Balanced (.node fst rest)) {e : α × �
 /-- A balanced node is one taller than its first child. -/
 theorem Balanced.height_node (h : Balanced (.node fst rest)) :
     (BTree.node fst rest).height = fst.height + 1 := by
-  have hh : ∀ e ∈ rest, e.2.2.height = fst.height := fun _ => h.height_of_mem_rest
-  clear h
+  have := heightRest_le_iff.2 fun e he => Nat.succ_le_succ (h.height_of_mem_rest he).le
   rw [BTree.height_node]
-  suffices heightRest rest ≤ fst.height + 1 by omega
-  induction rest with
-  | nil => simp
-  | cons e rest ih =>
-    obtain ⟨k, v, c⟩ := e
-    have hc := hh _ List.mem_cons_self
-    have := ih fun e he => hh e (List.mem_cons_of_mem _ he)
-    simp only at hc
-    rw [heightRest_cons]
-    omega
+  omega
 
 /-- The first child of a balanced node is balanced. -/
 theorem Balanced.first (h : Balanced (.node fst rest)) : Balanced fst := by
@@ -552,26 +515,37 @@ theorem Occupied.le_length (h : Occupied t (.node fst rest)) : t - 1 ≤ rest.le
   cases h
   assumption
 
+/-- Children of an occupied tree are occupied. -/
+theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c ∈ tr.children) :
+    Occupied t c := by
+  cases tr with
+  | leaf => simp at hc
+  | node first rest =>
+    simp only [children_node, List.mem_cons, List.mem_map] at hc
+    rcases hc with rfl | ⟨e, he, rfl⟩
+    · exact h.first
+    · exact h.of_mem_rest he
+
 /-- Mapping over values preserves occupancy. -/
 @[simp] theorem occupied_map (f : β → γ) : Occupied t (tr.map f) ↔ Occupied t tr := by
   induction tr with
   | leaf => exact ⟨fun _ => .leaf, fun _ => .leaf⟩
   | node first rest ih₁ ih₂ =>
-    rw [map_node]
+    rw [map_node, mapRest_eq_map]
     constructor
     · intro h
       have h₁ := h.le_length
       have h₂ := h.length_le
-      rw [length_mapRest] at h₁ h₂
+      rw [List.length_map] at h₁ h₂
       exact .node h₁ h₂ (ih₁.1 h.first) fun e he =>
-        (ih₂ e he).1 (h.of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩))
+        (ih₂ e he).1 (h.of_mem_rest (List.mem_map_of_mem he))
     · intro h
       refine .node ?_ ?_ (ih₁.2 h.first) fun e he => ?_
-      · rw [length_mapRest]
+      · rw [List.length_map]
         exact h.le_length
-      · rw [length_mapRest]
+      · rw [List.length_map]
         exact h.length_le
-      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+      · obtain ⟨e, he', rfl⟩ := List.mem_map.1 he
         exact (ih₂ e he').2 (h.of_mem_rest he')
 
 /-- Mapping over values preserves balance. -/
@@ -579,17 +553,17 @@ theorem Occupied.le_length (h : Occupied t (.node fst rest)) : t - 1 ≤ rest.le
   induction tr with
   | leaf => exact ⟨fun _ => .leaf, fun _ => .leaf⟩
   | node first rest ih₁ ih₂ =>
-    rw [map_node]
+    rw [map_node, mapRest_eq_map]
     constructor
     · intro h
       refine .node (ih₁.1 h.first) (fun e he => ?_) fun e he => ?_
-      · exact (ih₂ e he).1 (h.of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩))
-      · simpa using h.height_of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩)
+      · exact (ih₂ e he).1 (h.of_mem_rest (List.mem_map_of_mem he))
+      · simpa using h.height_of_mem_rest (List.mem_map_of_mem he)
     · intro h
       refine .node (ih₁.2 h.first) (fun e he => ?_) fun e he => ?_
-      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+      · obtain ⟨e, he', rfl⟩ := List.mem_map.1 he
         exact (ih₂ e he').2 (h.of_mem_rest he')
-      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+      · obtain ⟨e, he', rfl⟩ := List.mem_map.1 he
         simpa using h.height_of_mem_rest he'
 
 end Inversion
@@ -613,6 +587,23 @@ theorem IsWF.occupied_of_mem_rest {first : BTree α β} {rest : List (α × β �
 theorem IsWF.sorted_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
     c.toList.IsSortedAssoc :=
   h.sorted.sublist (toList_sublist_of_mem_children hc)
+
+/-- Every subtree of a well-formed tree is well-formed: non-root occupancy implies the root rule
+when `2 ≤ t`. -/
+theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c := by
+  have ho := h.occupied_of_mem_children c hc
+  have ht := h.two_le
+  refine ⟨ht, ?_, fun hne => ?_, fun c' hc' => ho.of_mem_children hc',
+    h.balanced.of_mem_children hc, h.sorted_of_mem_children hc⟩
+  · cases c with
+    | leaf => simp
+    | node first rest => exact ho.length_le
+  · cases c with
+    | leaf => exact absurd rfl hne
+    | node first rest =>
+      have := ho.le_length
+      rw [rootKeys_node]
+      omega
 
 /-- Mapping over values preserves well-formedness. -/
 @[simp] theorem isWF_map (f : β → γ) : IsWF t (tr.map f) ↔ IsWF t tr := by

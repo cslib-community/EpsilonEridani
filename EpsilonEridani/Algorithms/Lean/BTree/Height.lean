@@ -114,11 +114,10 @@ theorem Occupied.size_le (ho : Occupied t tr) : tr.size ≤ (2 * t) ^ tr.height 
       have hf := ih₁ ho.first
       rw [h0] at hf ⊢
       simpa [size_node] using hf
-    · refine size_node_le_pow ht hm fun c hc => ?_
-      simp only [children_node, List.mem_cons, List.mem_map] at hc
-      rcases hc with rfl | ⟨e, he, rfl⟩
-      · exact ih₁ ho.first
-      · exact ih₂ e he (ho.of_mem_rest he)
+    · have ih : ∀ c ∈ (BTree.node first rest).children,
+          Occupied t c → c.size ≤ (2 * t) ^ c.height - 1 := by
+        simpa only [children_node, List.forall_mem_cons, List.forall_mem_map] using ⟨ih₁, ih₂⟩
+      exact size_node_le_pow ht hm fun c hc => ih c hc (ho.of_mem_children hc)
 
 variable [LinearOrder α]
 
