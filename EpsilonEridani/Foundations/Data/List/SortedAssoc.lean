@@ -99,14 +99,14 @@ theorem lookup_append_of_forall_gt {l₁ l₂ : List (α × β)} {k : α} (h : �
 def IsSortedAssoc (l : List (α × β)) : Prop :=
   (l.map Prod.fst).Pairwise (· < ·)
 
-instance (l : List (α × β)) : Decidable l.IsSortedAssoc :=
-  inferInstanceAs (Decidable ((l.map Prod.fst).Pairwise (· < ·)))
-
 variable {l l₁ l₂ : List (α × β)} {k : α} {v : β} {p q : α × β}
 
 /-- `IsSortedAssoc` restated: the key list is strictly increasing. -/
 theorem isSortedAssoc_iff_pairwise : l.IsSortedAssoc ↔ (l.map Prod.fst).Pairwise (· < ·) :=
   Iff.rfl
+
+instance (l : List (α × β)) : Decidable l.IsSortedAssoc :=
+  decidable_of_iff _ isSortedAssoc_iff_pairwise.symm
 
 /-- `IsSortedAssoc` restated through Mathlib's `SortedLT`. -/
 theorem isSortedAssoc_iff_sortedLT : l.IsSortedAssoc ↔ (l.map Prod.fst).SortedLT :=
