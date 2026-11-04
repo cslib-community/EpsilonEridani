@@ -24,12 +24,7 @@ the least or greatest entry by key. The corresponding `IsWF` characterizations a
 minimum degree. The queries return `none` exactly when the tree has no entries, including
 malformed trees consisting of nodes with no keys.
 
-`minM`, `maxM` and `min?` are exposed: `minM` and `maxM` so that later instantiations can unfold
-them, and `min?` because `minM` is structurally recursive, so `decide` evaluates it and the
-`min?` examples use `decide`. `maxM` recurses on `.node c (e :: rest)`, which is not a structural
-subterm, so it is defined by well-founded recursion on `sizeOf`; `max?` is reasoned about through
-the equation lemmas `max?_node_nil`, `max?_node_singleton` and `max?_node_cons_cons`, which the
-`max?` examples use through `simp`.
+`maxM` and `max?` are characterized by their equation lemmas and the model equations.
 -/
 
 public section
@@ -53,10 +48,17 @@ descending into its first child, and no comparisons are needed. -/
     | some p => pure (some p)
     | none => pure (rest.head?.map fun e => (e.1, e.2.1))
 
+-- `maxM` recurses on `.node c (e :: rest)`, which is not a structural subterm, so it is defined
+-- by well-founded recursion on `sizeOf` and left unexposed; later modules rewrite with the
+-- monadic equations `maxM_leaf`, `maxM_node_nil`, `maxM_node_singleton` and
+-- `maxM_node_cons_cons`. `minM` and `min?` are exposed because `minM` is structurally recursive,
+-- so `decide` evaluates `min?`.
+
 /-- Greatest entry, the last in structural order: walk along each node's triples, which is free,
 and descend into the last child, falling back to the last entry when that child has no entries.
-`visit` fires once per node, when the walk reaches the node's last triple. -/
-@[expose] def maxM (visit : m Unit) : BTree α β → m (Option (α × β))
+`visit` fires once per node: when the walk reaches the node's last triple, or, at a node without
+keys, before descending into its only child. -/
+def maxM (visit : m Unit) : BTree α β → m (Option (α × β))
   | .leaf => pure none
   | .node first [] => do
     visit
@@ -68,6 +70,46 @@ and descend into the last child, falling back to the last entry when that child 
     | none => pure (some (k, v))
   | .node _ ((_, _, c) :: e :: rest) => maxM visit (.node c (e :: rest))
 termination_by tr => sizeOf tr
+
+/-- The empty tree has no minimum entry and is not visited. -/
+theorem minM_leaf (visit : m Unit) : minM visit (.leaf : BTree α β) = pure none := (rfl)
+
+/-- At a node, `visit` fires before the first child's minimum, which takes priority over the
+node's first entry. -/
+theorem minM_node (visit : m Unit) (first : BTree α β) (rest : List (α × β × BTree α β)) :
+    minM visit (.node first rest) = (do
+      visit
+      match ← minM visit first with
+      | some p => pure (some p)
+      | none => pure (rest.head?.map fun e => (e.1, e.2.1))) := (rfl)
+
+/-- The empty tree has no maximum entry and is not visited. -/
+theorem maxM_leaf (visit : m Unit) : maxM visit (.leaf : BTree α β) = pure none := by
+  rw [maxM]
+
+/-- A node without keys is visited, then the maximum of its only child is returned. -/
+theorem maxM_node_nil (visit : m Unit) (first : BTree α β) :
+    maxM visit (.node first []) = (do
+      visit
+      maxM visit first) := by
+  rw [maxM]
+
+/-- At the last triple, the node is visited, then the last child's maximum takes priority over
+the last entry. -/
+theorem maxM_node_singleton (visit : m Unit) (first c : BTree α β) (k : α) (v : β) :
+    maxM visit (.node first [(k, v, c)]) = (do
+      visit
+      match ← maxM visit c with
+      | some p => pure (some p)
+      | none => pure (some (k, v))) := by
+  rw [maxM]
+
+/-- Walking past a triple is free: the maximum continues on the remaining suffix of the node,
+with no visit. -/
+theorem maxM_node_cons_cons (visit : m Unit) (first c : BTree α β) (k : α) (v : β)
+    (e : α × β × BTree α β) (rest : List (α × β × BTree α β)) :
+    maxM visit (.node first ((k, v, c) :: e :: rest)) = maxM visit (.node c (e :: rest)) := by
+  rw [maxM]
 
 end Polymorphic
 
@@ -93,7 +135,7 @@ theorem max?_def : max? tr = Id.run (maxM (pure ()) tr) := (rfl)
 
 /-- The empty tree has no maximum entry. -/
 @[simp] theorem max?_leaf : max? (.leaf : BTree α β) = none := by
-  simp [max?, maxM]
+  simp [max?, maxM_leaf]
 
 /-- The first child's minimum takes priority over the node's first entry. -/
 @[simp] theorem min?_node (first : BTree α β) (rest : List (α × β × BTree α β)) :
@@ -105,19 +147,19 @@ theorem max?_def : max? tr = Id.run (maxM (pure ()) tr) := (rfl)
 /-- A node without keys has the maximum of its only child. -/
 @[simp] theorem max?_node_nil (first : BTree α β) :
     max? (.node first []) = max? first := by
-  simp [max?, maxM]
+  simp [max?, maxM_node_nil]
 
 /-- At the last triple, the last child's maximum takes priority over the last entry. -/
 @[simp] theorem max?_node_singleton (first c : BTree α β) (k : α) (v : β) :
     max? (.node first [(k, v, c)]) = (max? c).or (some (k, v)) := by
-  simp only [max?, maxM, Id.run_bind]
+  simp only [max?, maxM_node_singleton, Id.run_bind]
   cases Id.run (maxM (pure ()) c) <;> rfl
 
 /-- Scanning past a triple leaves the maximum query on the remaining suffix of the node. -/
 @[simp] theorem max?_node_cons_cons (first c : BTree α β) (k : α) (v : β)
     (e : α × β × BTree α β) (rest : List (α × β × BTree α β)) :
     max? (.node first ((k, v, c) :: e :: rest)) = max? (.node c (e :: rest)) := by
-  simp [max?, maxM]
+  simp [max?, maxM_node_cons_cons]
 
 /-- Model equation: the minimum query returns the first entry of `toList`, on any tree. -/
 theorem min?_eq : min? tr = tr.toList.head? := by
