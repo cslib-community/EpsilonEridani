@@ -242,10 +242,12 @@ theorem erase_cons : erase k (p :: l) = if p.1 = k then erase k l else p :: eras
   rw [List.filter_cons]
   by_cases hp : p.1 = k <;> simp [hp]
 
+/-- Erasure distributes over concatenation. -/
 @[simp, grind =] theorem erase_append : erase k (l₁ ++ l₂) = erase k l₁ ++ erase k l₂ := by
   unfold erase
   exact List.filter_append l₁ l₂
 
+/-- Erasure keeps exactly the entries whose key differs from the erased one. -/
 @[simp, grind =] theorem mem_erase_iff : p ∈ erase k l ↔ p ∈ l ∧ p.1 ≠ k := by
   simp [erase, List.mem_filter]
 
