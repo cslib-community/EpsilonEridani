@@ -15,8 +15,10 @@ The B-trees of Bayer and McCreight, *Organization and maintenance of large order
 (1972), in the minimum-degree form of Cormen, Leiserson, Rivest and Stein, *Introduction to
 Algorithms*, Chapter 18. A node is a first child followed by a list of `(key, value, child)`
 triples, so a node with `m` keys has `m + 1` children by construction; `leaf` is the empty tree.
-The tree is a map from keys to values, specified by `toList`, its entries in key order, against
-the sorted association list model `List.IsSortedAssoc`.
+The tree is a map from keys to values, specified by `toList` against the sorted association list
+model `List.IsSortedAssoc`. `toList` traverses any tree in structural in-order (the first child,
+then each key-value pair followed by its child); under `IsWF` (its `sorted` field) the keys are
+strictly increasing, which gives map semantics.
 
 `height` counts the nodes on a root-to-leaf path: the leaf has height `0` and a node has height
 one more than its tallest child. Well-formedness at minimum degree `t` is the hypothesis
@@ -24,7 +26,7 @@ one more than its tallest child. Well-formedness at minimum degree `t` is the hy
 `2 * t - 1` keys (`Occupied`), a non-leaf root has between `1` and `2 * t - 1` keys, all leaves
 are at the same depth (`Balanced`), and `toList` is key-sorted. Taking `t = 2` gives 2-3-4 trees.
 
-`induction_on` is the induction principle for the nested type; proofs use it rather than the raw
+`induction` is the induction principle for the nested type; proofs use it rather than the raw
 nested recursor. The Boolean checkers `occupied`, `balanced` and `isWF` decide the predicates,
 so that well-formedness of concrete trees is checked by `decide`. The operations and checkers are
 `@[expose]`d so that `decide` and `rfl` evaluate them from other modules.
@@ -49,7 +51,8 @@ namespace BTree
 variable {α : Type u} {β : Type v} {γ : Type w}
 
 mutual
-/-- Entries in key order. -/
+/-- Entries in structural in-order: the first child's, then each key-value pair followed by its
+child's. The keys are strictly increasing under `IsWF` (its `sorted` field). -/
 @[expose] def toList : BTree α β → List (α × β)
   | leaf => []
   | node first rest => first.toList ++ toListRest rest
@@ -84,10 +87,11 @@ end
 /-- Number of entries. -/
 @[expose] def size (tr : BTree α β) : ℕ := tr.toList.length
 
-/-- Keys in order. -/
+/-- Keys in structural in-order, as in `toList`; strictly increasing under `IsWF`. -/
 @[expose] def keys (tr : BTree α β) : List α := tr.toList.map Prod.fst
 
-/-- Fold over entries in key order; the specification of any direct recursive fold. -/
+/-- Fold over entries in structural in-order, as in `toList`, which is key order under `IsWF`;
+the specification of any direct recursive fold. -/
 @[expose] def foldl (f : γ → α × β → γ) (init : γ) (tr : BTree α β) : γ :=
   tr.toList.foldl f init
 
@@ -239,12 +243,12 @@ variable {tr : BTree α β}
 
 /-- Induction on B-trees, with a hypothesis for the first child and for every child among the
 triples. This replaces the raw nested recursor in proofs. -/
-theorem induction_on {motive : BTree α β → Prop} (leaf : motive .leaf)
+theorem induction {motive : BTree α β → Prop} (leaf : motive .leaf)
     (node : ∀ first rest, motive first → (∀ e ∈ rest, motive e.2.2) → motive (.node first rest)) :
     ∀ tr, motive tr
   | .leaf => leaf
   | .node first rest =>
-    node first rest (induction_on leaf node first) fun e _ => induction_on leaf node e.2.2
+    node first rest (induction leaf node first) fun e _ => induction leaf node e.2.2
 termination_by tr => sizeOf tr
 decreasing_by
   · simp_wf
@@ -255,7 +259,7 @@ decreasing_by
     simp_wf
     omega
 
-attribute [induction_eliminator] induction_on
+attribute [induction_eliminator] induction
 
 /-! ### Basic API -/
 
@@ -265,12 +269,41 @@ attribute [induction_eliminator] induction_on
 /-- The length of the entries is the size. -/
 @[simp] theorem length_toList : tr.toList.length = tr.size := rfl
 
+/-- The entries of a list of triples: one per key, plus those of the children. -/
+@[simp] theorem length_toListRest {rest : List (α × β × BTree α β)} :
+    (toListRest rest).length = rest.length + (rest.map fun e => e.2.2.size).sum := by
+  induction rest with
+  | nil => rfl
+  | cons e rest ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp only [toListRest_cons, List.length_cons, List.length_append, ih, List.map_cons,
+      List.sum_cons, length_toList]
+    omega
+
+/-- The size of a node: its first child's, one per key, and its other children's. -/
+theorem size_node {first : BTree α β} {rest : List (α × β × BTree α β)} :
+    (node first rest).size = first.size + rest.length + (rest.map fun e => e.2.2.size).sum := by
+  rw [← length_toList, toList_node, List.length_append, length_toListRest, length_toList,
+    Nat.add_assoc]
+
 /-- `foldl` is the fold over `toList`. -/
 theorem foldl_eq (f : γ → α × β → γ) (init : γ) : tr.foldl f init = tr.toList.foldl f init :=
   rfl
 
+/-- `keys` is the list of first components of `toList`. -/
+theorem keys_def : tr.keys = tr.toList.map Prod.fst := rfl
+
+/-- A key belongs to a tree's keys when some entry of the tree carries it. -/
+@[simp] theorem mem_keys {k : α} : k ∈ tr.keys ↔ ∃ v, (k, v) ∈ tr := by
+  simp only [keys_def, List.mem_map, mem_def]
+  constructor
+  · rintro ⟨⟨k, v⟩, hp, rfl⟩
+    exact ⟨v, hp⟩
+  · rintro ⟨v, hv⟩
+    exact ⟨_, hv, rfl⟩
+
 /-- Only the empty tree has height `0`. -/
-theorem height_eq_zero_iff : tr.height = 0 ↔ tr = .leaf := by
+@[simp] theorem height_eq_zero_iff : tr.height = 0 ↔ tr = .leaf := by
   cases tr with
   | leaf => simp
   | node first rest => simp
@@ -369,6 +402,34 @@ theorem toList_sublist_of_mem_children {c : BTree α β} (hc : c ∈ tr.children
     rcases hc with rfl | ⟨e, he, rfl⟩
     · exact List.sublist_append_left _ _
     · exact (toList_sublist_toListRest_of_mem he).trans (List.sublist_append_right _ _)
+
+/-- Every child among the triples of a node is shorter than the node. -/
+theorem height_succ_le_of_mem_rest {first : BTree α β} {rest : List (α × β × BTree α β)}
+    {e : α × β × BTree α β} (he : e ∈ rest) : e.2.2.height + 1 ≤ (node first rest).height := by
+  rw [height_node]
+  suffices e.2.2.height + 1 ≤ heightRest rest by omega
+  induction rest with
+  | nil => simp at he
+  | cons e' rest ih =>
+    obtain ⟨k, v, c'⟩ := e'
+    rw [heightRest_cons]
+    rcases List.mem_cons.1 he with rfl | he
+    · dsimp only
+      omega
+    · have := ih he
+      omega
+
+/-- Every child of a tree is shorter than the tree. -/
+theorem height_succ_le_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
+    c.height + 1 ≤ tr.height := by
+  cases tr with
+  | leaf => simp at hc
+  | node first rest =>
+    simp only [children_node, List.mem_cons, List.mem_map] at hc
+    rcases hc with rfl | ⟨e, he, rfl⟩
+    · rw [height_node]
+      omega
+    · exact height_succ_le_of_mem_rest he
 
 /-! ### Inversion lemmas -/
 

@@ -39,23 +39,6 @@ section Node
 
 variable {first : BTree α β} {rest : List (α × β × BTree α β)}
 
-/-- The entries of a list of triples: one per key, plus those of the children. -/
-theorem length_toListRest :
-    (toListRest rest).length = rest.length + (rest.map fun e => e.2.2.size).sum := by
-  induction rest with
-  | nil => rfl
-  | cons e rest ih =>
-    obtain ⟨k, v, c⟩ := e
-    simp only [toListRest_cons, List.length_cons, List.length_append, ih, List.map_cons,
-      List.sum_cons, length_toList]
-    omega
-
-/-- The size of a node: its first child's, one per key, and its other children's. -/
-theorem size_node :
-    (node first rest).size = first.size + rest.length + (rest.map fun e => e.2.2.size).sum := by
-  rw [← length_toList, toList_node, List.length_append, length_toListRest, length_toList,
-    Nat.add_assoc]
-
 /-- A node whose children each hold at least `n - 1` entries holds at least
 `(rest.length + 1) * n - 1`. -/
 theorem le_size_node {n : ℕ} (h₁ : n - 1 ≤ first.size) (h₂ : ∀ e ∈ rest, n - 1 ≤ e.2.2.size) :
@@ -102,24 +85,40 @@ theorem Occupied.pow_sub_one_le_size (ho : Occupied t tr) (hb : Balanced tr) :
     rw [hb.height_node, Nat.pow_succ']
     exact Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by have := ho.le_length; omega)) 1
 
-/-- A balanced occupied subtree of height `h` holds at most `(2 * t) ^ h - 1` entries. -/
-theorem Occupied.size_le (ho : Occupied t tr) (hb : Balanced tr) :
-    tr.size ≤ (2 * t) ^ tr.height - 1 := by
+/-- A node with at most `2 * t - 1` keys, for positive `t`, whose children each satisfy the
+upper bound of `Occupied.size_le` satisfies it too. -/
+private theorem size_node_le_pow {first : BTree α β} {rest : List (α × β × BTree α β)}
+    (ht : 0 < t) (hm : rest.length ≤ 2 * t - 1)
+    (hc : ∀ c ∈ (node first rest).children, c.size ≤ (2 * t) ^ c.height - 1) :
+    (node first rest).size ≤ (2 * t) ^ (node first rest).height - 1 := by
+  have hpos := height_succ_le_of_mem_children (tr := node first rest) List.mem_cons_self
+  obtain ⟨H, hH⟩ : ∃ H, (node first rest).height = H + 1 :=
+    ⟨_, (Nat.sub_add_cancel (by omega)).symm⟩
+  have hle : ∀ c ∈ (node first rest).children, c.size ≤ (2 * t) ^ H - 1 := fun c hc' =>
+    (hc c hc').trans (Nat.sub_le_sub_right (Nat.pow_le_pow_right (by omega)
+      (by have := height_succ_le_of_mem_children hc'; omega)) 1)
+  rw [hH, Nat.pow_succ']
+  exact (size_node_le (Nat.pow_pos (by omega)) (hle _ List.mem_cons_self) fun e he =>
+    hle _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))).trans
+      (Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by omega)) 1)
+
+/-- An occupied subtree of height `h` holds at most `(2 * t) ^ h - 1` entries. -/
+theorem Occupied.size_le (ho : Occupied t tr) : tr.size ≤ (2 * t) ^ tr.height - 1 := by
   induction tr with
   | leaf => simp
   | node first rest ih₁ ih₂ =>
-    have hf := ih₁ ho.first hb.first
-    have hc : ∀ e ∈ rest, e.2.2.size ≤ (2 * t) ^ first.height - 1 := fun e he =>
-      hb.height_of_mem_rest he ▸ ih₂ e he (ho.of_mem_rest he) (hb.of_mem_rest he)
     have hm := ho.length_le
-    rw [hb.height_node, Nat.pow_succ']
     obtain rfl | ht := Nat.eq_zero_or_pos t
     · obtain rfl : rest = [] := List.eq_nil_of_length_eq_zero (by omega)
-      have : (2 * 0) ^ first.height - 1 = 0 := by cases first.height <;> simp
-      simp only [size_node, List.length_nil, List.map_nil, List.sum_nil]
-      omega
-    · exact (size_node_le (Nat.pow_pos (by omega)) hf hc).trans
-        (Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by omega)) 1)
+      have h0 : ∀ n, (2 * 0) ^ n - 1 = 0 := fun n => by cases n <;> simp
+      have hf := ih₁ ho.first
+      rw [h0] at hf ⊢
+      simpa [size_node] using hf
+    · refine size_node_le_pow ht hm fun c hc => ?_
+      simp only [children_node, List.mem_cons, List.mem_map] at hc
+      rcases hc with rfl | ⟨e, he, rfl⟩
+      · exact ih₁ ho.first
+      · exact ih₂ e he (ho.of_mem_rest he)
 
 variable [LinearOrder α]
 
@@ -144,15 +143,8 @@ theorem IsWF.size_le (h : IsWF t tr) : tr.size ≤ (2 * t) ^ tr.height - 1 := by
   cases tr with
   | leaf => simp
   | node first rest =>
-    have hb := h.balanced
-    have hk := h.rootKeys_le
-    rw [rootKeys_node] at hk
-    have ht := h.two_le
-    have hc : ∀ e ∈ rest, e.2.2.size ≤ (2 * t) ^ first.height - 1 := fun e he =>
-      hb.height_of_mem_rest he ▸ (h.occupied_of_mem_rest he).size_le (hb.of_mem_rest he)
-    rw [hb.height_node, Nat.pow_succ']
-    exact (size_node_le (Nat.pow_pos (by omega)) (h.occupied_first.size_le hb.first) hc).trans
-      (Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by omega)) 1)
+    exact size_node_le_pow (by have := h.two_le; omega) h.rootKeys_le fun c hc =>
+      (h.occupied_of_mem_children c hc).size_le
 
 /-- The height of a well-formed tree is logarithmic in its size (Cormen et al., Theorem 18.1). -/
 theorem IsWF.height_le_log (h : IsWF t tr) : tr.height ≤ Nat.log t ((tr.size + 1) / 2) + 1 := by
