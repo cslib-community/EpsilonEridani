@@ -223,6 +223,23 @@ variable {first : BTree α β} {rest : List (α × β × BTree α β)} {k : α} 
 @[simp] theorem mapRest_cons (f : β → γ) :
     mapRest f ((k, v, c) :: rest) = (k, f v, c.map f) :: mapRest f rest := rfl
 
+/-- Mapping a list of triples keeps its length. -/
+@[simp] theorem length_mapRest (f : β → γ) : (mapRest f rest).length = rest.length := by
+  induction rest with
+  | nil => rfl
+  | cons e rest ih =>
+    obtain ⟨k, v, c⟩ := e
+    simp [ih]
+
+/-- A triple belongs to a mapped list of triples when it is the image of a triple of the list. -/
+theorem mem_mapRest_iff (f : β → γ) {e : α × γ × BTree α γ} :
+    e ∈ mapRest f rest ↔ ∃ e' ∈ rest, (e'.1, f e'.2.1, e'.2.2.map f) = e := by
+  induction rest with
+  | nil => simp
+  | cons e' rest ih =>
+    obtain ⟨k, v, c⟩ := e'
+    simp [ih, eq_comm]
+
 /-- The empty tree has no children. -/
 @[simp] theorem children_leaf : (leaf : BTree α β).children = [] := rfl
 
@@ -342,6 +359,26 @@ theorem keys_def : tr.keys = tr.toList.map Prod.fst := rfl
 /-- Mapping over values keeps the keys. -/
 @[simp] theorem keys_map (f : β → γ) : (tr.map f).keys = tr.keys := by
   simp [keys, Function.comp_def]
+
+/-- Mapping over values gives the empty tree exactly when the tree is empty. -/
+@[simp] theorem map_eq_leaf_iff (f : β → γ) : tr.map f = leaf ↔ tr = leaf := by
+  cases tr <;> simp
+
+/-- Mapping over values keeps the number of root keys. -/
+@[simp] theorem rootKeys_map (f : β → γ) : (tr.map f).rootKeys = tr.rootKeys := by
+  cases tr <;> simp
+
+/-- The children of a mapped tree are the mapped children. -/
+@[simp] theorem children_map (f : β → γ) : (tr.map f).children = tr.children.map (·.map f) := by
+  cases tr with
+  | leaf => rfl
+  | node first rest =>
+    simp only [map_node, children_node, List.map_cons, List.map_map, List.cons.injEq, true_and]
+    induction rest with
+    | nil => rfl
+    | cons e rest ih =>
+      obtain ⟨k, v, c⟩ := e
+      simp [ih]
 
 /-- Mapping the identity leaves the tree unchanged. -/
 @[simp] theorem map_id : tr.map id = tr := by
@@ -515,6 +552,46 @@ theorem Occupied.le_length (h : Occupied t (.node fst rest)) : t - 1 ≤ rest.le
   cases h
   assumption
 
+/-- Mapping over values preserves occupancy. -/
+@[simp] theorem occupied_map (f : β → γ) : Occupied t (tr.map f) ↔ Occupied t tr := by
+  induction tr with
+  | leaf => exact ⟨fun _ => .leaf, fun _ => .leaf⟩
+  | node first rest ih₁ ih₂ =>
+    rw [map_node]
+    constructor
+    · intro h
+      have h₁ := h.le_length
+      have h₂ := h.length_le
+      rw [length_mapRest] at h₁ h₂
+      exact .node h₁ h₂ (ih₁.1 h.first) fun e he =>
+        (ih₂ e he).1 (h.of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩))
+    · intro h
+      refine .node ?_ ?_ (ih₁.2 h.first) fun e he => ?_
+      · rw [length_mapRest]
+        exact h.le_length
+      · rw [length_mapRest]
+        exact h.length_le
+      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+        exact (ih₂ e he').2 (h.of_mem_rest he')
+
+/-- Mapping over values preserves balance. -/
+@[simp] theorem balanced_map (f : β → γ) : Balanced (tr.map f) ↔ Balanced tr := by
+  induction tr with
+  | leaf => exact ⟨fun _ => .leaf, fun _ => .leaf⟩
+  | node first rest ih₁ ih₂ =>
+    rw [map_node]
+    constructor
+    · intro h
+      refine .node (ih₁.1 h.first) (fun e he => ?_) fun e he => ?_
+      · exact (ih₂ e he).1 (h.of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩))
+      · simpa using h.height_of_mem_rest ((mem_mapRest_iff f).2 ⟨e, he, rfl⟩)
+    · intro h
+      refine .node (ih₁.2 h.first) (fun e he => ?_) fun e he => ?_
+      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+        exact (ih₂ e he').2 (h.of_mem_rest he')
+      · obtain ⟨e, he', rfl⟩ := (mem_mapRest_iff f).1 he
+        simpa using h.height_of_mem_rest he'
+
 end Inversion
 
 section LinearOrder
@@ -536,6 +613,21 @@ theorem IsWF.occupied_of_mem_rest {first : BTree α β} {rest : List (α × β �
 theorem IsWF.sorted_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
     c.toList.IsSortedAssoc :=
   h.sorted.sublist (toList_sublist_of_mem_children hc)
+
+/-- Mapping over values preserves well-formedness. -/
+@[simp] theorem isWF_map (f : β → γ) : IsWF t (tr.map f) ↔ IsWF t tr := by
+  have hs : (tr.map f).toList.IsSortedAssoc ↔ tr.toList.IsSortedAssoc := by
+    rw [List.isSortedAssoc_iff_pairwise, List.isSortedAssoc_iff_pairwise, ← keys_def, ← keys_def,
+      keys_map]
+  constructor
+  · rintro ⟨h₁, h₂, h₃, h₄, h₅, h₆⟩
+    refine ⟨h₁, by simpa using h₂, fun hne => by simpa using h₃ (by simpa using hne), ?_,
+      by simpa using h₅, hs.1 h₆⟩
+    simpa using h₄
+  · rintro ⟨h₁, h₂, h₃, h₄, h₅, h₆⟩
+    refine ⟨h₁, by simpa using h₂, fun hne => by simpa using h₃ (by simpa using hne), ?_,
+      by simpa using h₅, hs.2 h₆⟩
+    simpa using h₄
 
 end LinearOrder
 
