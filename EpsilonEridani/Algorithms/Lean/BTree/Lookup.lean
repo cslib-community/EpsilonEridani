@@ -87,10 +87,10 @@ abbrev leI (a b : α) : Id Bool := pure (decide (a ≤ b))
 @[expose] def slot (k : α) (rest : List (α × β × BTree α β)) : ℕ := Id.run (slotM leI k rest)
 
 /-- Pure lookup: the `Id` instantiation of `lookupM` with `visit := pure ()`. -/
-@[expose] def lookup (k : α) (tr : BTree α β) : Option β := Id.run (lookupM leI (pure ()) k tr)
+def lookup (k : α) (tr : BTree α β) : Option β := Id.run (lookupM leI (pure ()) k tr)
 
 /-- Pure membership test: the `Id` instantiation of `containsM` with `visit := pure ()`. -/
-@[expose] def contains (k : α) (tr : BTree α β) : Bool := Id.run (containsM leI (pure ()) k tr)
+def contains (k : α) (tr : BTree α β) : Bool := Id.run (containsM leI (pure ()) k tr)
 
 /-- `slot` is the `Id` instantiation of `slotM`. -/
 theorem slot_def (k : α) (rest : List (α × β × BTree α β)) :
