@@ -117,16 +117,8 @@ theorem IsSortedAssoc.filter (f : α × β → Bool) (h : l.IsSortedAssoc) :
 
 /-- Keys are distinct: two entries of a sorted list with the same key are the same entry. -/
 theorem IsSortedAssoc.eq_of_mem_of_mem (h : l.IsSortedAssoc) (hp : p ∈ l) (hq : q ∈ l)
-    (hk : p.1 = q.1) : p = q := by
-  induction l with
-  | nil => simp at hp
-  | cons a l ih =>
-    rw [isSortedAssoc_cons_iff] at h
-    rcases List.mem_cons.1 hp with rfl | hp' <;> rcases List.mem_cons.1 hq with rfl | hq'
-    · rfl
-    · exact absurd hk (h.1 q hq').ne
-    · exact absurd hk.symm (h.1 p hp').ne
-    · exact ih h.2 hp' hq'
+    (hk : p.1 = q.1) : p = q :=
+  List.inj_on_of_nodup_map (isSortedAssoc_iff_sortedLT.1 h).nodup hp hq hk
 
 /-- The head of a sorted association list is its entry of least key. -/
 theorem IsSortedAssoc.head?_eq_some_iff (h : l.IsSortedAssoc) :
@@ -368,7 +360,7 @@ theorem mem_insert_of_mem (hq : q ∈ l) (hne : q.1 ≠ k) : q ∈ insert k v l 
 
 /-- On a sorted list, the entries after insertion are the new entry and the old entries with
 other keys. -/
-theorem mem_insert_iff (h : l.IsSortedAssoc) :
+@[simp] theorem mem_insert_iff (h : l.IsSortedAssoc) :
     q ∈ insert k v l ↔ q = (k, v) ∨ q ∈ l ∧ q.1 ≠ k := by
   constructor
   · intro hq
