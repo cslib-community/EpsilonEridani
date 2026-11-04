@@ -172,7 +172,7 @@ end
 @[expose] def isWF [LinearOrder α] (t : ℕ) (tr : BTree α β) : Bool :=
   decide (2 ≤ t) && decide (tr.rootKeys ≤ 2 * t - 1) &&
     (tr matches .leaf || decide (1 ≤ tr.rootKeys)) && tr.children.all (occupied t) &&
-    balanced tr && decide ((tr.toList.map Prod.fst).Pairwise (· < ·))
+    balanced tr && decide tr.toList.IsSortedAssoc
 
 /-! ### Equation lemmas -/
 
@@ -680,13 +680,12 @@ variable {rest : List (α × β × BTree α β)} {t n : ℕ}
     occupied_iff, balanced_iff]
   constructor
   · rintro ⟨⟨⟨⟨⟨h₁, h₂⟩, h₃⟩, h₄⟩, h₅⟩, h₆⟩
-    refine ⟨h₁, h₂, fun hne => ?_, h₄, h₅, List.isSortedAssoc_iff_pairwise.2 h₆⟩
+    refine ⟨h₁, h₂, fun hne => ?_, h₄, h₅, h₆⟩
     cases tr with
     | leaf => exact absurd rfl hne
     | node => simpa using h₃
   · intro h
-    refine ⟨⟨⟨⟨⟨h.two_le, h.rootKeys_le⟩, ?_⟩, h.occupied_of_mem_children⟩, h.balanced⟩,
-      List.isSortedAssoc_iff_pairwise.1 h.sorted⟩
+    refine ⟨⟨⟨⟨⟨h.two_le, h.rootKeys_le⟩, ?_⟩, h.occupied_of_mem_children⟩, h.balanced⟩, h.sorted⟩
     cases tr with
     | leaf => simp
     | node => exact Or.inr (h.rootKeys_pos nofun)
