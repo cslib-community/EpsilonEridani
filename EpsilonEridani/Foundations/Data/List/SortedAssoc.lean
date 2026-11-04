@@ -18,7 +18,7 @@ lemmas consume; Mathlib's `List.SortedLT` is the same predicate by `List.sortedL
 The model operations live in `EpsilonEridani.SortedAssoc` and are plain list functions. Lookup is
 `List.lookup`; insertion replaces an existing key; erasure, strict predecessor and successor,
 closed-interval restriction, and rank are defined here. The minimum and maximum of a sorted list
-are its `head?` and `getLast?`, characterised by `List.IsSortedAssoc.head?_eq_some_iff` and
+are its `head?` and `getLast?`, characterized by `List.IsSortedAssoc.head?_eq_some_iff` and
 `List.IsSortedAssoc.getLast?_eq_some_iff`. Together these are the reference semantics against
 which tree-shaped maps are verified through their `toList`.
 
