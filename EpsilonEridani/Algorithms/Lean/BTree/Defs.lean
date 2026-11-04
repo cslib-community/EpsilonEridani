@@ -471,6 +471,29 @@ theorem Balanced.of_mem_rest (h : Balanced (.node fst rest)) {e : α × β × BT
   cases h with
   | node _ h _ => exact h e he
 
+/-- Children of a balanced tree are one level shorter. -/
+theorem Balanced.height_of_mem_children {c : BTree α β} (h : Balanced tr) (hc : c ∈ tr.children) :
+    c.height + 1 = tr.height := by
+  cases tr with
+  | leaf => simp at hc
+  | node first rest =>
+    rw [h.height_node]
+    simp only [children_node, List.mem_cons, List.mem_map] at hc
+    rcases hc with rfl | ⟨e, he, rfl⟩
+    · rfl
+    · rw [h.height_of_mem_rest he]
+
+/-- Children of a balanced tree are balanced. -/
+theorem Balanced.of_mem_children {c : BTree α β} (h : Balanced tr) (hc : c ∈ tr.children) :
+    Balanced c := by
+  cases tr with
+  | leaf => simp at hc
+  | node first rest =>
+    simp only [children_node, List.mem_cons, List.mem_map] at hc
+    rcases hc with rfl | ⟨e, he, rfl⟩
+    · exact h.first
+    · exact h.of_mem_rest he
+
 /-- The first child of an occupied node is occupied. -/
 theorem Occupied.first (h : Occupied t (.node fst rest)) : Occupied t fst := by
   cases h
@@ -508,29 +531,6 @@ theorem IsWF.occupied_of_mem_rest {first : BTree α β} {rest : List (α × β �
     {e : α × β × BTree α β} (h : IsWF t (node first rest)) (he : e ∈ rest) :
     Occupied t e.2.2 :=
   h.occupied_of_mem_children _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))
-
-/-- Every child of a well-formed tree is one shorter than the tree. -/
-theorem IsWF.height_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
-    c.height + 1 = tr.height := by
-  cases tr with
-  | leaf => simp at hc
-  | node first rest =>
-    have hb := h.balanced
-    rw [hb.height_node]
-    simp only [children_node, List.mem_cons, List.mem_map] at hc
-    rcases hc with rfl | ⟨e, he, rfl⟩
-    · rfl
-    · rw [hb.height_of_mem_rest he]
-
-/-- Every child of a well-formed tree is balanced. -/
-theorem IsWF.balanced_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : Balanced c := by
-  cases tr with
-  | leaf => simp at hc
-  | node first rest =>
-    simp only [children_node, List.mem_cons, List.mem_map] at hc
-    rcases hc with rfl | ⟨e, he, rfl⟩
-    · exact h.balanced.first
-    · exact h.balanced.of_mem_rest he
 
 /-- Every child of a well-formed tree has sorted entries. -/
 theorem IsWF.sorted_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
