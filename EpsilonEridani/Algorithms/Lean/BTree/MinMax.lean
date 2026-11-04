@@ -15,14 +15,21 @@ The extremal-entry queries follow the leftmost or rightmost child, as in Cormen,
 Rivest and Stein, *Introduction to Algorithms*, Chapter 18. Each is defined once over an
 arbitrary monad, with a node-visit action, then instantiated at `Id` for the pure query.
 No comparator or order instance is needed: the queries use the tree's structural order.
-A visit is charged once for each nonempty node on the descent; scanning a node's triples
-for its last child does not charge additional visits.
+A visit is charged once for each node on the descent, leaves excluded and nodes without keys
+included; scanning a node's triples for its last child does not charge additional visits.
 
 `min?_eq` and `max?_eq` identify these queries with `head?` and `getLast?` of `toList`, even
 without sortedness or occupancy. Under `List.IsSortedAssoc`, the returned entry is respectively
 the least or greatest entry by key. The corresponding `IsWF` characterizations apply at any
 minimum degree. The queries return `none` exactly when the tree has no entries, including
 malformed trees consisting of nodes with no keys.
+
+`minM`, `maxM` and `min?` are exposed: `minM` and `maxM` so that later instantiations can unfold
+them, and `min?` because `minM` is structurally recursive, so `decide` evaluates it and the
+`min?` examples use `decide`. `maxM` recurses on `.node c (e :: rest)`, which is not a structural
+subterm, so it is defined by well-founded recursion on `sizeOf`; `max?` is reasoned about through
+the equation lemmas `max?_node_nil`, `max?_node_singleton` and `max?_node_cons_cons`, which the
+`max?` examples use through `simp`.
 -/
 
 public section
@@ -36,8 +43,9 @@ section Polymorphic
 variable {α β : Type} {m : Type → Type w} [Monad m]
 
 /-- First entry in structural order: descend through first children, falling back to the
-node's first entry when its first child has no entries. No comparisons are needed. -/
-def minM (visit : m Unit) : BTree α β → m (Option (α × β))
+node's first entry when its first child has no entries. `visit` fires once per node, before
+descending into its first child, and no comparisons are needed. -/
+@[expose] def minM (visit : m Unit) : BTree α β → m (Option (α × β))
   | .leaf => pure none
   | .node first rest => do
     visit
@@ -45,10 +53,10 @@ def minM (visit : m Unit) : BTree α β → m (Option (α × β))
     | some p => pure (some p)
     | none => pure (rest.head?.map fun e => (e.1, e.2.1))
 
-/-- Last entry in structural order: scan the node's triples and descend into its last child,
-falling back to the last entry when that child has no entries. `visit` fires once per node,
-after the scan, and no comparisons are needed. -/
-def maxM (visit : m Unit) : BTree α β → m (Option (α × β))
+/-- Greatest entry, the last in structural order: walk along each node's triples, which is free,
+and descend into the last child, falling back to the last entry when that child has no entries.
+`visit` fires once per node, when the walk reaches the node's last triple. -/
+@[expose] def maxM (visit : m Unit) : BTree α β → m (Option (α × β))
   | .leaf => pure none
   | .node first [] => do
     visit
@@ -68,7 +76,7 @@ section Pure
 variable {α β : Type} {tr : BTree α β}
 
 /-- Pure minimum query: the `Id` instantiation of `minM` with a trivial visit action. -/
-def min? (tr : BTree α β) : Option (α × β) := Id.run (minM (pure ()) tr)
+@[expose] def min? (tr : BTree α β) : Option (α × β) := Id.run (minM (pure ()) tr)
 
 /-- Pure maximum query: the `Id` instantiation of `maxM` with a trivial visit action. -/
 def max? (tr : BTree α β) : Option (α × β) := Id.run (maxM (pure ()) tr)
@@ -167,30 +175,30 @@ end Pure
 
 /-! Examples exercise both descent and fallback, including nodes with no keys. -/
 
-example : min? (BTree.leaf : BTree ℕ String) = none := by simp
+example : min? (BTree.leaf : BTree ℕ String) = none := by decide
 
 example : max? (BTree.leaf : BTree ℕ String) = none := by simp
 
 example : min? (BTree.node (α := ℕ) (β := String) .leaf
-    [(1, "a", .leaf), (3, "c", .leaf)]) = some (1, "a") := by simp
+    [(1, "a", .leaf), (3, "c", .leaf)]) = some (1, "a") := by decide
 
 example : max? (BTree.node (α := ℕ) (β := String) .leaf
     [(1, "a", .leaf), (3, "c", .leaf)]) = some (3, "c") := by simp
 
 example : min? (BTree.node (α := ℕ) (β := String)
     (.node .leaf [(1, "a", .leaf)]) [(3, "c", .node .leaf [(5, "e", .leaf)])]) =
-    some (1, "a") := by simp
+    some (1, "a") := by decide
 
 example : max? (BTree.node (α := ℕ) (β := String)
     (.node .leaf [(1, "a", .leaf)]) [(3, "c", .node .leaf [(5, "e", .leaf)])]) =
     some (5, "e") := by simp
 
-example : min? (BTree.node (α := ℕ) (β := String) (.node .leaf []) []) = none := by simp
+example : min? (BTree.node (α := ℕ) (β := String) (.node .leaf []) []) = none := by decide
 
 example : max? (BTree.node (α := ℕ) (β := String) (.node .leaf []) []) = none := by simp
 
 example : min? (BTree.node (α := ℕ) (β := String) (.node .leaf [])
-    [(3, "c", .node .leaf [])]) = some (3, "c") := by simp
+    [(3, "c", .node .leaf [])]) = some (3, "c") := by decide
 
 example : max? (BTree.node (α := ℕ) (β := String) (.node .leaf [])
     [(3, "c", .node .leaf [])]) = some (3, "c") := by simp
