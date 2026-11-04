@@ -96,7 +96,7 @@ end Node
 variable {t : ℕ} {tr : BTree α β}
 
 /-- A balanced occupied subtree of height `h` holds at least `t ^ h - 1` entries. -/
-theorem Occupied.pow_sub_one_le_size (ho : Occupied t tr) (hb : Balanced tr) (ht : 2 ≤ t) :
+theorem Occupied.pow_sub_one_le_size (ho : Occupied t tr) (hb : Balanced tr) :
     t ^ tr.height - 1 ≤ tr.size := by
   induction tr using inductionOn with
   | leaf => simp [size]
@@ -139,9 +139,9 @@ theorem IsWF.le_size (h : IsWF t tr) (hne : tr ≠ .leaf) :
     rw [rootKeys_node] at hk
     have hc : ∀ e ∈ rest, t ^ first.height - 1 ≤ e.2.2.size := fun e he => by
       have ho := h.children _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))
-      exact hb.height_of_mem_rest he ▸ ho.pow_sub_one_le_size (hb.of_mem_rest he) h.two_le
+      exact hb.height_of_mem_rest he ▸ ho.pow_sub_one_le_size (hb.of_mem_rest he)
     refine le_trans ?_ (le_size_node
-      ((h.children _ List.mem_cons_self).pow_sub_one_le_size hb.first h.two_le) hc)
+      ((h.children _ List.mem_cons_self).pow_sub_one_le_size hb.first) hc)
     rw [hb.height_node, Nat.add_sub_cancel]
     exact Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by omega)) 1
 
