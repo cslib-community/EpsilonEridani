@@ -477,6 +477,12 @@ theorem insert_append_of_forall_lt (h : ∀ p ∈ l₁, p.1 < k) :
     have ha : a₁ < k := h _ (List.mem_cons_self ..)
     simp [insert_cons, not_lt.2 ha.le, ha.ne', ih fun p hp => h p (List.mem_cons_of_mem _ hp)]
 
+/-- Insertion skips a prefix of smaller keys followed by an entry with a smaller key. -/
+theorem insert_append_cons_of_lt {k' : α} {v' : β} (h : ∀ p ∈ l₁, p.1 < k) (hk : k' < k) :
+    insert k v (l₁ ++ (k', v') :: l₂) = l₁ ++ (k', v') :: insert k v l₂ := by
+  rw [insert_append_of_forall_lt h, insert_cons]
+  simp [not_lt.2 hk.le, hk.ne']
+
 /-- Insertion ignores a suffix whose keys are all above `k`. -/
 theorem insert_append_of_forall_gt (h : ∀ p ∈ l₂, k < p.1) :
     insert k v (l₁ ++ l₂) = insert k v l₁ ++ l₂ := by
