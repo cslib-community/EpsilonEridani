@@ -637,7 +637,7 @@ theorem size_insert (h : IsWF t tr) (k : α) (v : β) :
 
 /-- On a tree with sorted entries, lookup after insertion finds the new value at its key and is
 unchanged elsewhere. -/
-theorem lookup_insert_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k k' : α) (v : β) :
+@[simp] theorem lookup_insert_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k k' : α) (v : β) :
     lookup k' (insert t k v tr) = if k' = k then some v else lookup k' tr := by
   have hs : (insert t k v tr).toList.IsSortedAssoc := by
     rw [toList_insert_of_isSortedAssoc h]
@@ -650,7 +650,7 @@ theorem lookup_insert_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k k' : α)
   · exact SortedAssoc.lookup_insert_of_ne hk
 
 /-- Lookup after insertion finds the new value at its key and is unchanged elsewhere. -/
-theorem lookup_insert (h : IsWF t tr) (k k' : α) (v : β) :
+@[simp] theorem lookup_insert (h : IsWF t tr) (k k' : α) (v : β) :
     lookup k' (insert t k v tr) = if k' = k then some v else lookup k' tr :=
   lookup_insert_of_isSortedAssoc h.sorted k k' v
 
