@@ -581,6 +581,19 @@ theorem rank_def : rank k l = (l.filter fun p => p.1 < k).length := rfl
 
 @[simp] theorem rank_nil : rank k ([] : List (α × β)) = 0 := rfl
 
+/-- The first entry contributes to rank exactly when its key is strictly below the query. -/
+@[simp] theorem rank_cons :
+    rank k (p :: l) = if p.1 < k then rank k l + 1 else rank k l := by
+  by_cases hp : p.1 < k <;> simp [rank, hp]
+
+/-- Rank is zero exactly when all keys are at least the query. -/
+@[simp] theorem rank_eq_zero_iff : rank k l = 0 ↔ ∀ p ∈ l, k ≤ p.1 := by
+  simp [rank, List.filter_eq_nil_iff, not_lt]
+
+/-- Rank counts every entry exactly when every key is strictly below the query. -/
+@[simp] theorem rank_eq_length_iff : rank k l = l.length ↔ ∀ p ∈ l, p.1 < k := by
+  simp [rank, List.length_filter_eq_length_iff]
+
 /-- An entry is in the range restriction iff it is in the list with key in `[lo, hi]`. -/
 @[simp, grind =] theorem mem_range_iff {lo hi : α} :
     p ∈ range lo hi l ↔ p ∈ l ∧ lo ≤ p.1 ∧ p.1 ≤ hi := by
