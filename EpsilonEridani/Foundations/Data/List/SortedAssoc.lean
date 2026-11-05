@@ -565,6 +565,18 @@ theorem range_def {lo hi : α} : range lo hi l = l.filter fun p => lo ≤ p.1 �
 
 @[simp] theorem range_nil {lo hi : α} : range lo hi ([] : List (α × β)) = [] := rfl
 
+/-- Range restriction keeps the first entry exactly when its key is in the interval. -/
+@[simp] theorem range_cons {lo hi : α} :
+    range lo hi (p :: l) =
+      if lo ≤ p.1 ∧ p.1 ≤ hi then p :: range lo hi l else range lo hi l := by
+  simp [range, List.filter_cons]
+
+/-- The range is empty exactly when every entry lies outside the closed interval. -/
+@[simp] theorem range_eq_nil_iff {lo hi : α} :
+    range lo hi l = [] ↔ ∀ p ∈ l, p.1 < lo ∨ hi < p.1 := by
+  simp only [range, List.filter_eq_nil_iff, decide_eq_true_eq]
+  grind
+
 theorem rank_def : rank k l = (l.filter fun p => p.1 < k).length := rfl
 
 @[simp] theorem rank_nil : rank k ([] : List (α × β)) = 0 := rfl
