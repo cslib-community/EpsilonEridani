@@ -12,10 +12,10 @@ public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
 # Predecessor and successor in classic B-trees
 
 Strict predecessor and successor queries scan the keys of a node and descend into one child,
-retaining a separator entry as a fallback. This is the ordered-search method for the classic
-B-trees of Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, Chapter 18.
-The predecessor excludes keys at least as large as the query, and the successor excludes keys
-at most as large as the query; a key equal to the query is never returned.
+retaining a separator entry as a fallback. Cormen, Leiserson, Rivest and Stein, *Introduction to
+Algorithms*, Section 18.2, leave these queries as an exercise; the descent here follows their
+search. The predecessor excludes keys at least as large as the query, and the successor excludes
+keys at most as large as the query; a key equal to the query is never returned.
 
 `predM` and `succM` take a monadic comparator and a node-visit action, with no order instance.
 Their pure `Id` instantiations `pred?` and `succ?` follow the pattern of `lookup`.
