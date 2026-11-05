@@ -14,8 +14,11 @@ public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
 Strict predecessor and successor queries scan the keys of a node and descend into one child,
 retaining a separator entry as a fallback. Cormen, Leiserson, Rivest and Stein, *Introduction to
 Algorithms*, Section 18.2, leave these queries as an exercise; the descent here follows their
-search. The predecessor excludes keys at least as large as the query, and the successor excludes
-keys at most as large as the query; a key equal to the query is never returned.
+search. On a tree whose `toList` is sorted, run with the comparator of the key order, the
+predecessor is the greatest entry with key strictly below the query and the successor is the least
+entry with key strictly above it, so a key equal to the query is never returned
+(`pred?_eq_some_iff_of_isSortedAssoc`, `succ?_eq_some_iff_of_isSortedAssoc`). For an arbitrary
+comparator or an unsorted tree, the definitions describe only the descent.
 
 `predM` and `succM` take a monadic comparator and a node-visit action, with no order instance.
 Their pure `Id` instantiations `pred?` and `succ?` follow the pattern of `lookup`.
@@ -39,9 +42,11 @@ section Polymorphic
 
 variable {α β : Type} {m : Type → Type w} [Monad m]
 
-/-- Greatest entry with key strictly below `k`. Scan past smaller separators, retaining each
-as a fallback; at the first separator at least `k`, visit the node and descend left of it.
-If no such separator exists, visit the node and descend into its last child. -/
+/-- Strict predecessor search. Scan past the keys `k'` for which `le k k'` fails, retaining each
+as a fallback; at the first key `k'` with `le k k'`, visit the node and descend into the child
+before it. If there is no such key, visit the node and descend into its last child. When `le`
+decides the key order and `toList` is sorted, the result is the greatest entry with key strictly
+below `k`; see `pred?_eq`. -/
 def predM (le : α → α → m Bool) (visit : m Unit) (k : α) :
     BTree α β → m (Option (α × β))
   | .leaf => pure none
@@ -56,9 +61,11 @@ def predM (le : α → α → m Bool) (visit : m Unit) (k : α) :
       return (← predM le visit k (.node c rest)).or (some (k', v))
 termination_by tr => sizeOf tr
 
-/-- Least entry with key strictly above `k`. Scan past separators at most `k`; at the first
-larger separator, visit the node and descend left of it, using that separator as a fallback.
-If no such separator exists, visit the node and descend into its last child. -/
+/-- Strict successor search. Scan past the keys `k'` with `le k' k`; at the first key `k'` for
+which that fails, visit the node and descend into the child before it, retaining `(k', v)` as a
+fallback. If there is no such key, visit the node and descend into its last child. When `le`
+decides the key order and `toList` is sorted, the result is the least entry with key strictly
+above `k`; see `succ?_eq`. -/
 def succM (le : α → α → m Bool) (visit : m Unit) (k : α) :
     BTree α β → m (Option (α × β))
   | .leaf => pure none
