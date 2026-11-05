@@ -139,15 +139,6 @@ structure Good (t h : ℕ) (c : BTree α β) : Prop where
   /-- Every node of the subtree is occupied. -/
   occupied : Occupied t c
 
-/-- A node whose children are balanced and as tall as its first child is balanced, and one
-taller than its first child. -/
-theorem balanced_node_of_forall {first : BTree α β} {rest : List (α × β × BTree α β)}
-    (hf : Balanced first) (hr : ∀ e ∈ rest, Balanced e.2.2 ∧ e.2.2.height = first.height) :
-    Balanced (.node first rest) ∧ (BTree.node first rest).height = first.height + 1 :=
-  have hb : Balanced (.node first rest) :=
-    .node hf (fun e he => (hr e he).1) fun e he => (hr e he).2
-  ⟨hb, hb.height_node⟩
-
 /-- A node over good children of height `h` is balanced, of height `h + 1`, with occupied
 children. -/
 theorem node_of_good {first : BTree α β} {rest : List (α × β × BTree α β)} {h : ℕ}
