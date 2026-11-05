@@ -513,6 +513,24 @@ theorem succ?_def : succ? k l = (l.filter fun p => k < p.1).head? := rfl
 
 @[simp] theorem succ?_nil : succ? k ([] : List (α × β)) = none := rfl
 
+/-- The predecessor in a singleton: the entry itself when its key is below `k`. -/
+theorem pred?_singleton : pred? k [(k', v)] = if k' < k then some (k', v) else none := by
+  by_cases h : k' < k <;> simp [pred?, h]
+
+/-- The successor in a singleton: the entry itself when its key is above `k`. -/
+theorem succ?_singleton : succ? k [(k', v)] = if k < k' then some (k', v) else none := by
+  by_cases h : k < k' <;> simp [succ?, h]
+
+/-- The predecessor in a cons: the head is the fallback when its key is below `k`. -/
+@[simp] theorem pred?_cons :
+    pred? k ((k', v) :: l) = if k' < k then (pred? k l).or (some (k', v)) else pred? k l := by
+  by_cases h : k' < k <;> simp [pred?, h, List.getLast?_cons]
+
+/-- The successor in a cons: the head when its key is above `k`, else the successor in the tail. -/
+@[simp] theorem succ?_cons :
+    succ? k ((k', v) :: l) = if k < k' then some (k', v) else succ? k l := by
+  by_cases h : k < k' <;> simp [succ?, h]
+
 /-- The predecessor in a concatenation is the predecessor in the suffix, else in the prefix. -/
 @[simp, grind =] theorem pred?_append : pred? k (l₁ ++ l₂) = (pred? k l₂).or (pred? k l₁) := by
   simp [pred?, List.filter_append, List.getLast?_append]
