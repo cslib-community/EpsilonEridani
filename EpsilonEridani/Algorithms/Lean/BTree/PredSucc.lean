@@ -205,7 +205,7 @@ theorem pred?_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
         · exact hk.trans (hgt p hp).le
       simp only [hk, ↓reduceIte, SortedAssoc.pred?_append, hn, Option.none_or, ih₁ h₁]
     · have hs : SortedAssoc.pred? k [(k', v)] = some (k', v) := by
-        simp [SortedAssoc.pred?, lt_of_not_ge hk]
+        simp [SortedAssoc.pred?_singleton, lt_of_not_ge hk]
       rw [← List.singleton_append (x := (k', v))]
       simp only [hk, ↓reduceIte, SortedAssoc.pred?_append, hs, Option.or_assoc,
         Option.some_or, ih₂ h₂]
@@ -226,10 +226,10 @@ theorem succ?_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) :
     · have hn : SortedAssoc.succ? k first.toList = none :=
         SortedAssoc.succ?_eq_none_iff.2 fun p hp => (hlt p hp).le.trans hk
       have hs : SortedAssoc.succ? k [(k', v)] = none := by
-        simp [SortedAssoc.succ?, not_lt.2 hk]
+        simp [SortedAssoc.succ?_singleton, not_lt.2 hk]
       simp only [hk, ↓reduceIte, SortedAssoc.succ?_append, hn, hs, Option.none_or, ih₁ h₂]
     · have hs : SortedAssoc.succ? k [(k', v)] = some (k', v) := by
-        simp [SortedAssoc.succ?, lt_of_not_ge hk]
+        simp [SortedAssoc.succ?_singleton, lt_of_not_ge hk]
       simp only [hk, ↓reduceIte, SortedAssoc.succ?_append, hs, Option.some_or, ih₂ h₁]
 
 /-- Model equation for strict predecessor on well-formed trees. -/
