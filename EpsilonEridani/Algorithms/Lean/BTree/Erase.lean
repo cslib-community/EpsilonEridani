@@ -7,7 +7,6 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Insert
-public import EpsilonEridani.Algorithms.Lean.BTree.MinMax
 
 /-!
 # Erasure from classic B-trees
@@ -33,9 +32,9 @@ Each operation is defined once over an arbitrary monad `m`, with a comparator
 `eraseSubtreeM` and `eraseRestM` its recursion, with the scan and the equality test of
 `lookupM`. `visit` fires on entering each node of the search path, including the path of
 `popMinM` to the successor, and once more for each sibling a repair inspects, so a descent
-visits at most two nodes per level. `eraseMinM` and `eraseMaxM` find the extreme entry with
-`minM` or `maxM` and erase its key. The pure operations are the `Id` instantiations with `leI` and
-`visit := pure ()`.
+visits at most two nodes per level. The pure operations are the `Id` instantiations with `leI`
+and `visit := pure ()`. The extremal removals built on erasure are in
+`EpsilonEridani.BTree.EraseMinMax`.
 
 `eraseRestM` takes the child before the triples together with the computation of its erasure,
 so that the definitions are structurally recursive and `@[expose]`d: `decide` evaluates erasure
@@ -47,8 +46,7 @@ the shape of children and results; `eraseFits_eraseSubtree` is the shape invaria
 well-formed trees, `IsWF.erase` preserves well-formedness and `height_erase` states that the
 height stays or falls by one. `size_erase` and `lookup_erase` give the size and lookup after
 erasure, and hold already on trees with sorted entries (`size_erase_of_isSortedAssoc`,
-`lookup_erase_of_isSortedAssoc`). `eraseMin?_eq` and `eraseMax?_eq` are the model equations of
-the extremal removals. Costs are not stated here.
+`lookup_erase_of_isSortedAssoc`). Costs are not stated here.
 -/
 
 public section
@@ -237,34 +235,6 @@ theorem popMinM_node (t : ℕ) (visit : m Unit) (first : BTree α β)
       | some (e, first'), (k, v, c) :: rest' => do
         let p ← rebalanceRightM t visit first' k v c rest'
         pure (some (e, .node p.1 p.2))) := rfl
-
-/-- Remove and return the least entry: find it with `minM`, then erase its key. -/
-@[expose] def eraseMinM (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
-    m (Option ((α × β) × BTree α β)) := do
-  match ← minM visit tr with
-  | none => pure none
-  | some p => return some (p, ← eraseM t le visit p.1 tr)
-
-/-- Removing the least entry finds it with `minM`, then erases its key. -/
-theorem eraseMinM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
-    eraseMinM t le visit tr = (do
-      match ← minM visit tr with
-      | none => pure none
-      | some p => return some (p, ← eraseM t le visit p.1 tr)) := rfl
-
-/-- Remove and return the greatest entry: find it with `maxM`, then erase its key. -/
-@[expose] def eraseMaxM (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
-    m (Option ((α × β) × BTree α β)) := do
-  match ← maxM visit tr with
-  | none => pure none
-  | some p => return some (p, ← eraseM t le visit p.1 tr)
-
-/-- Removing the greatest entry finds it with `maxM`, then erases its key. -/
-theorem eraseMaxM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
-    eraseMaxM t le visit tr = (do
-      match ← maxM visit tr with
-      | none => pure none
-      | some p => return some (p, ← eraseM t le visit p.1 tr)) := rfl
 
 end Polymorphic
 
@@ -915,68 +885,6 @@ theorem toList_erase_of_lookup_eq_none (h : IsWF t tr) {k : α} (hk : lookup k t
     (erase t k tr).toList = tr.toList :=
   toList_erase_of_lookup_eq_none_of_isSortedAssoc h.sorted hk
 
-/-- Remove and return the least entry, pure. -/
-@[expose] def eraseMin? (t : ℕ) (tr : BTree α β) : Option ((α × β) × BTree α β) :=
-  Id.run (eraseMinM t leI (pure ()) tr)
-
-/-- Remove and return the greatest entry, pure. -/
-@[expose] def eraseMax? (t : ℕ) (tr : BTree α β) : Option ((α × β) × BTree α β) :=
-  Id.run (eraseMaxM t leI (pure ()) tr)
-
-/-- `eraseMin?` is the minimum together with the erasure of its key. -/
-theorem eraseMin?_eq_map_min? : eraseMin? t tr = (min? tr).map fun p => (p, erase t p.1 tr) := by
-  unfold eraseMin? eraseMinM min?
-  cases minM (m := Id) (pure ()) tr <;> rfl
-
-/-- `eraseMax?` is the maximum together with the erasure of its key. -/
-theorem eraseMax?_eq_map_max? : eraseMax? t tr = (max? tr).map fun p => (p, erase t p.1 tr) := by
-  rw [max?_def]
-  unfold eraseMax? eraseMaxM
-  cases maxM (m := Id) (pure ()) tr <;> rfl
-
-/-- Model equation of `eraseMin?`: the first entry and the tree with its key erased. -/
-theorem eraseMin?_eq : eraseMin? t tr = tr.toList.head?.map fun p => (p, erase t p.1 tr) := by
-  rw [eraseMin?_eq_map_min?, min?_eq]
-
-/-- Model equation of `eraseMax?`: the last entry and the tree with its key erased. -/
-theorem eraseMax?_eq : eraseMax? t tr = tr.toList.getLast?.map fun p => (p, erase t p.1 tr) := by
-  rw [eraseMax?_eq_map_max?, max?_eq]
-
-/-- On a well-formed tree, `eraseMin?` splits the entries into the first and the rest, and the
-rest is well-formed. -/
-theorem toList_of_eraseMin?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
-    (he : eraseMin? t tr = some (p, tr')) : tr.toList = p :: tr'.toList ∧ IsWF t tr' := by
-  rw [eraseMin?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨q, hq, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  obtain ⟨rfl, rfl⟩ := hpq
-  refine ⟨?_, h.erase _⟩
-  obtain ⟨l, hl⟩ : ∃ l, tr.toList = q :: l := by
-    cases hc : tr.toList with
-    | nil => simp [hc] at hq
-    | cons a l => simp only [hc, List.head?_cons, Option.some.injEq] at hq; exact ⟨l, hq ▸ rfl⟩
-  have hs := h.sorted
-  rw [hl, List.isSortedAssoc_cons_iff] at hs
-  rw [toList_erase h, hl, SortedAssoc.erase_cons]
-  simp only [↓reduceIte]
-  rw [SortedAssoc.erase_of_forall_ne fun r hr => (hs.1 r hr).ne']
-
-/-- On a well-formed tree, `eraseMax?` splits the entries into the rest and the last, and the
-rest is well-formed. -/
-theorem toList_of_eraseMax?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
-    (he : eraseMax? t tr = some (p, tr')) : tr.toList = tr'.toList ++ [p] ∧ IsWF t tr' := by
-  rw [eraseMax?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨q, hq, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  obtain ⟨rfl, rfl⟩ := hpq
-  refine ⟨?_, h.erase _⟩
-  obtain ⟨l, hl⟩ := List.getLast?_eq_some_iff.1 hq
-  have hs := h.sorted
-  rw [hl, List.isSortedAssoc_append_iff] at hs
-  rw [toList_erase h, hl, SortedAssoc.erase_append,
-    SortedAssoc.erase_of_forall_ne fun r hr => (hs.2.2 r hr q (by simp)).ne]
-  simp [SortedAssoc.erase_cons]
-
 /-! ### Examples -/
 
 /-- A root collapse at `t = 2`: erasing the only root key merges its two children. -/
@@ -1030,12 +938,6 @@ example :
       (.node .leaf [(0, (), .leaf), (1, (), .leaf), (2, (), .leaf)])
       [(5, (), .node .leaf [(6, (), .leaf), (7, (), .leaf)])])
     tr.toList = [(0, ()), (2, ()), (5, ()), (6, ()), (7, ())] ∧ IsWF 3 tr := by decide
-
-/-- `eraseMin?` returns the least entry and the rest. -/
-example :
-    ((eraseMin? 2 (BTree.node (α := ℕ) (β := String) .leaf
-      [(1, "a", .leaf), (3, "c", .leaf)])).map fun p => (p.1, p.2.toList)) =
-      some ((1, "a"), [(3, "c")]) := by decide
 
 end Pure
 
