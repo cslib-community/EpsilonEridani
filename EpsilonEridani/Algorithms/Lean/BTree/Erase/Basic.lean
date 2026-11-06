@@ -405,11 +405,6 @@ theorem Good.underfull {c : BTree α β} {h : ℕ} (hc : Good t h c) : Underfull
   ⟨hc.balanced, hc.height_eq, fun _ hx => hc.occupied.of_mem_children hx, hc.occupied.rootKeys_le,
     fun hne => by have := hc.occupied.le_rootKeys hne; omega⟩
 
-/-- A good node has at least one key. -/
-theorem Good.one_le_rootKeys (ht : 2 ≤ t) {c : BTree α β} {h : ℕ} (hc : Good t h c)
-    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys :=
-  hc.occupied.one_le_rootKeys ht hne
-
 /-- A good tree of positive height is a node. -/
 theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h) : c ≠ .leaf := by
   rintro rfl
@@ -476,7 +471,7 @@ theorem Good.underfull_of_eraseFits (ht : 2 ≤ t) {c c' : BTree α β} {h : ℕ
     (hf : (∀ x ∈ c.children, Occupied t x) → (c ≠ .leaf → 1 ≤ c.rootKeys) → EraseFits t c c') :
     Underfull t h c' :=
   hc.height_eq ▸ (hf (fun _ hx => hc.occupied.of_mem_children hx)
-    (hc.one_le_rootKeys ht)).underfull hc.occupied
+    (hc.occupied.one_le_rootKeys ht)).underfull hc.occupied
 
 /-- Re-splitting a node of between `t - 1` and `2 * t - 1 + t + 1` keys (`3 * t` when `1 ≤ t`)
 over good children gives good results. -/
