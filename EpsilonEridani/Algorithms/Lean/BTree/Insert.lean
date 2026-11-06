@@ -617,9 +617,8 @@ theorem height_le_height_insert (h : IsWF t tr) (k : α) (v : β) :
 one otherwise. -/
 theorem size_insert_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (k : α) (v : β) :
     (insert t k v tr).size = if (lookup k tr).isSome then tr.size else tr.size + 1 := by
-  rw [size, toList_insert_of_isSortedAssoc h, SortedAssoc.length_insert h,
-    lookup_eq_of_isSortedAssoc h]
-  rfl
+  rw [← length_toList (tr := insert t k v tr), toList_insert_of_isSortedAssoc h,
+    SortedAssoc.length_insert h, lookup_eq_of_isSortedAssoc h, length_toList]
 
 /-- Insertion keeps the size when the key is present and adds one otherwise. -/
 theorem size_insert (h : IsWF t tr) (k : α) (v : β) :
