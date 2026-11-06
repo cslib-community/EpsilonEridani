@@ -524,6 +524,19 @@ theorem Occupied.le_length (h : Occupied t (.node fst rest)) : t - 1 ≤ rest.le
   cases h
   assumption
 
+/-- An occupied tree has at most `2 * t - 1` root keys. -/
+theorem Occupied.rootKeys_le {c : BTree α β} (h : Occupied t c) : c.rootKeys ≤ 2 * t - 1 := by
+  cases c with
+  | leaf => simp
+  | node _ _ => exact h.length_le
+
+/-- An occupied node has at least `t - 1` root keys. -/
+theorem Occupied.le_rootKeys {c : BTree α β} (h : Occupied t c) (hne : c ≠ .leaf) :
+    t - 1 ≤ c.rootKeys := by
+  cases c with
+  | leaf => exact absurd rfl hne
+  | node _ _ => exact h.le_length
+
 /-- Children of an occupied tree are occupied. -/
 theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c ∈ tr.children) :
     Occupied t c := by

@@ -13,7 +13,12 @@ public import EpsilonEridani.Algorithms.Lean.BTree.MinMax
 # Erasure from classic B-trees
 
 Erasure in the B-trees of `EpsilonEridani.BTree`, by the bottom-up algorithm of the functional
-literature, the mirror image of `EpsilonEridani.BTree.Insert`. Erasure from a subtree may leave
+literature, the mirror image of `EpsilonEridani.BTree.Insert`. The repair follows the functional
+deletion of Mündler, *A Verified Imperative Implementation of B-Trees*, Archive of Formal Proofs
+(2021): `mergeSplit` is its merge followed by the insertion splitter `node_i`, and
+`rebalanceRightM` and `rebalanceLastM` are its `rebalance_middle_tree` and `rebalance_last_tree`.
+Mündler replaces an interior key by its predecessor; this version uses the successor, which sits
+in the same triple of the interleaved representation. Erasure from a subtree may leave
 it one key short (`underflows`); the parent repairs such a child against an adjacent sibling by
 merging the two around their separator and splitting the result again when it has more than
 `2 * t - 1` keys (`mergeSplit`, through `InsertResult.ofNode`). That single repair covers both
@@ -97,6 +102,20 @@ underflows, inspect `prev` (one visit) and merge them. -/
     pure ((mergeSplit t prev k v c).withRest [])
   else pure (prev, [(k, v, c)])
 
+/-- Repair against the right sibling visits and merges exactly when the child underflows. -/
+theorem rebalanceRightM_def (t : ℕ) (visit : m Unit) (c : BTree α β) (k : α) (v : β)
+    (s : BTree α β) (rest : List (α × β × BTree α β)) :
+    rebalanceRightM t visit c k v s rest =
+      if underflows t c then (do visit; pure ((mergeSplit t c k v s).withRest rest))
+      else pure (c, (k, v, s) :: rest) := rfl
+
+/-- Repair against the left sibling visits and merges exactly when the last child underflows. -/
+theorem rebalanceLastM_def (t : ℕ) (visit : m Unit) (prev : BTree α β) (k : α) (v : β)
+    (c : BTree α β) :
+    rebalanceLastM t visit prev k v c =
+      if underflows t c then (do visit; pure ((mergeSplit t prev k v c).withRest []))
+      else pure (prev, [(k, v, c)]) := rfl
+
 /-- Remove the least entry of a subtree, repairing on the way back up; the result may
 underflow by one key. -/
 @[expose] def popMinM (t : ℕ) (visit : m Unit) :
@@ -148,7 +167,9 @@ mutual
         pure (prev, (k', v', p.1) :: p.2)
 end
 
-/-- Erasure. -/
+/-- Remove the entry with key `k`, if any, from a B-tree of minimum degree `t`, comparing with
+`le` and calling `visit` on each node of the search path and on each sibling a repair inspects;
+an emptied root collapses into its only child. -/
 @[expose] def eraseM (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (k : α)
     (tr : BTree α β) : m (BTree α β) := do
   return collapse (← eraseSubtreeM t le visit k tr)
@@ -224,12 +245,26 @@ theorem popMinM_node (t : ℕ) (visit : m Unit) (first : BTree α β)
   | none => pure none
   | some p => return some (p, ← eraseM t le visit p.1 tr)
 
+/-- Removing the least entry finds it with `minM`, then erases its key. -/
+theorem eraseMinM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
+    eraseMinM t le visit tr = (do
+      match ← minM visit tr with
+      | none => pure none
+      | some p => return some (p, ← eraseM t le visit p.1 tr)) := rfl
+
 /-- Remove and return the greatest entry: find it with `maxM`, then erase its key. -/
 @[expose] def eraseMaxM (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
     m (Option ((α × β) × BTree α β)) := do
   match ← maxM visit tr with
   | none => pure none
   | some p => return some (p, ← eraseM t le visit p.1 tr)
+
+/-- Removing the greatest entry finds it with `maxM`, then erases its key. -/
+theorem eraseMaxM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
+    eraseMaxM t le visit tr = (do
+      match ← maxM visit tr with
+      | none => pure none
+      | some p => return some (p, ← eraseM t le visit p.1 tr)) := rfl
 
 end Polymorphic
 
@@ -252,19 +287,19 @@ variable {α β : Type} {t : ℕ}
   Id.run (popMinM t (pure ()) tr)
 
 /-- `rebalanceRight` is the `Id` instantiation of `rebalanceRightM`. -/
-theorem rebalanceRight_eq_run (c : BTree α β) (k : α) (v : β) (s : BTree α β)
+theorem rebalanceRight_def (c : BTree α β) (k : α) (v : β) (s : BTree α β)
     (rest : List (α × β × BTree α β)) :
     rebalanceRight t c k v s rest = Id.run (rebalanceRightM t (pure ()) c k v s rest) := (rfl)
 
 /-- `rebalanceLast` is the `Id` instantiation of `rebalanceLastM`. -/
-theorem rebalanceLast_eq_run (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
+theorem rebalanceLast_def (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
     rebalanceLast t prev k v c = Id.run (rebalanceLastM t (pure ()) prev k v c) := (rfl)
 
 /-- `popMin` is the `Id` instantiation of `popMinM`. -/
 theorem popMin_def (tr : BTree α β) : popMin t tr = Id.run (popMinM t (pure ()) tr) := (rfl)
 
 /-- Pure repair against the right sibling merges only an underflowing child. -/
-theorem rebalanceRight_def (c : BTree α β) (k : α) (v : β) (s : BTree α β)
+theorem rebalanceRight_eq_ite (c : BTree α β) (k : α) (v : β) (s : BTree α β)
     (rest : List (α × β × BTree α β)) :
     rebalanceRight t c k v s rest =
       if underflows t c then (mergeSplit t c k v s).withRest rest else (c, (k, v, s) :: rest) := by
@@ -272,7 +307,7 @@ theorem rebalanceRight_def (c : BTree α β) (k : α) (v : β) (s : BTree α β)
   split <;> rfl
 
 /-- Pure repair against the left sibling merges only an underflowing last child. -/
-theorem rebalanceLast_def (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
+theorem rebalanceLast_eq_ite (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
     rebalanceLast t prev k v c =
       if underflows t c then (mergeSplit t prev k v c).withRest [] else (prev, [(k, v, c)]) := by
   unfold rebalanceLast rebalanceLastM
@@ -311,7 +346,7 @@ theorem toList_rebalanceRight (c : BTree α β) (k : α) (v : β) (s : BTree α 
     (rest : List (α × β × BTree α β)) :
     (rebalanceRight t c k v s rest).1.toList ++ toListRest (rebalanceRight t c k v s rest).2 =
       c.toList ++ toListRest ((k, v, s) :: rest) := by
-  rw [rebalanceRight_def]
+  rw [rebalanceRight_eq_ite]
   split
   · rw [← InsertResult.toList_withRest, toList_mergeSplit, toListRest_cons]
     simp
@@ -321,7 +356,7 @@ theorem toList_rebalanceRight (c : BTree α β) (k : α) (v : β) (s : BTree α 
 theorem toList_rebalanceLast (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
     (rebalanceLast t prev k v c).1.toList ++ toListRest (rebalanceLast t prev k v c).2 =
       prev.toList ++ toListRest [(k, v, c)] := by
-  rw [rebalanceLast_def]
+  rw [rebalanceLast_eq_ite]
   split
   · rw [← InsertResult.toList_withRest, toList_mergeSplit, toListRest_cons]
     simp
@@ -373,18 +408,22 @@ def InsertResult.Mended (t h : ℕ) : InsertResult α β → Prop
   | .split l _ _ r => Good t h l ∧ Good t h r
 
 /-- A good subtree is at most one key short. -/
-theorem Good.underfull {c : BTree α β} {h : ℕ} (hc : Good t h c) : Underfull t h c := by
-  obtain ⟨hb, hh, ho⟩ := hc
-  refine ⟨hb, hh, fun x hx => ho.of_mem_children hx, ?_, fun hne => ?_⟩
-  · cases c with
-    | leaf => simp
-    | node _ _ => exact ho.length_le
-  · cases c with
-    | leaf => exact absurd rfl hne
-    | node _ _ =>
-      have := ho.le_length
-      simp only [rootKeys_node]
-      omega
+theorem Good.underfull {c : BTree α β} {h : ℕ} (hc : Good t h c) : Underfull t h c :=
+  ⟨hc.balanced, hc.height_eq, fun _ hx => hc.occupied.of_mem_children hx, hc.occupied.rootKeys_le,
+    fun hne => by have := hc.occupied.le_rootKeys hne; omega⟩
+
+/-- A good node has at least one key. -/
+theorem Good.one_le_rootKeys (ht : 2 ≤ t) {c : BTree α β} {h : ℕ} (hc : Good t h c)
+    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys := by
+  have := hc.occupied.le_rootKeys hne
+  omega
+
+/-- A good tree of positive height is a node. -/
+theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h) : c ≠ .leaf := by
+  rintro rfl
+  have := hc.height_eq
+  simp at this
+  omega
 
 /-- A subtree that does not underflow is occupied. -/
 theorem Underfull.occupied {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
@@ -403,58 +442,54 @@ theorem Underfull.good {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
     (hu : underflows t c = false) : Good t h c :=
   ⟨hc.1, hc.2.1, hc.occupied hu⟩
 
-/-- A good subtree satisfies the hypotheses of the shape lemmas for erasure. -/
-theorem Good.hyps (ht : 2 ≤ t) {c : BTree α β} {h : ℕ} (hc : Good t h c) :
-    Balanced c ∧ (∀ x ∈ c.children, Occupied t x) ∧ c.rootKeys ≤ 2 * t - 1 ∧
-      (c ≠ .leaf → 1 ≤ c.rootKeys) := by
-  obtain ⟨hb, -, hco, hk, hpos⟩ := hc.underfull
-  exact ⟨hb, hco, hk, fun hne => by have := hpos hne; have := hc.occupied; cases c with
-    | leaf => exact absurd rfl hne
-    | node _ _ => have := this.le_length; simp only [rootKeys_node] at *; omega⟩
+/-- Only a node underflows. -/
+theorem ne_leaf_of_underflows {c : BTree α β} (hu : underflows t c = true) : c ≠ .leaf := by
+  rintro rfl
+  simp [underflows] at hu
+
+/-- A subtree one key short that underflows has exactly `t - 2` keys. -/
+theorem Underfull.rootKeys_eq_of_underflows {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
+    (hu : underflows t c = true) : c.rootKeys = t - 2 := by
+  have := hc.2.2.2.2 (ne_leaf_of_underflows hu)
+  cases c with
+  | leaf => simp [underflows] at hu
+  | node f r =>
+    simp only [underflows, decide_eq_true_eq] at hu
+    simp only [rootKeys_node] at this ⊢
+    omega
+
+/-- A subtree that underflows has positive height. -/
+theorem Underfull.one_le_height_of_underflows {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
+    (hu : underflows t c = true) : 1 ≤ h := by
+  have hne := ne_leaf_of_underflows hu
+  rw [← hc.2.1]
+  exact Nat.one_le_iff_ne_zero.2 fun h0 => hne (height_eq_zero_iff.1 h0)
 
 /-- Erasure from an occupied subtree leaves it at most one key short. -/
 theorem EraseFits.underfull {tr c : BTree α β} (hf : EraseFits t tr c) (ho : Occupied t tr) :
     Underfull t tr.height c := by
   obtain ⟨hb, hh, hco, hk₁, hk₂⟩ := hf
-  refine ⟨hb, hh, hco, ?_, fun hne => ?_⟩
-  · cases tr with
-    | leaf => simp only [rootKeys_leaf] at hk₁; omega
-    | node _ _ => have := ho.length_le; simp only [rootKeys_node] at hk₁; omega
-  · cases tr with
-    | leaf =>
-      exact absurd (height_eq_zero_iff.1 (by simpa using hh)) hne
-    | node _ _ => have := ho.le_length; simp only [rootKeys_node] at hk₂; omega
+  refine ⟨hb, hh, hco, hk₁.trans ho.rootKeys_le, fun hne => ?_⟩
+  have htr : tr ≠ .leaf := by
+    rintro rfl
+    exact hne (height_eq_zero_iff.1 (by simpa using hh))
+  have := ho.le_rootKeys htr
+  omega
 
 /-- Re-splitting a node of between `t - 1` and `3 * t - 2` keys over good children gives good
 results. -/
-theorem InsertResult.mended_ofNode (ht : 2 ≤ t) {first : BTree α β}
+theorem InsertResult.mended_ofNode {first : BTree α β}
     {rest : List (α × β × BTree α β)} {h : ℕ} (hf : Good t h first)
     (hr : ∀ e ∈ rest, Good t h e.2.2) (hlo : t - 1 ≤ rest.length)
     (hhi : rest.length ≤ 3 * t - 2) : (InsertResult.ofNode t first rest).Mended t (h + 1) := by
-  unfold InsertResult.ofNode
-  split_ifs with hle
+  by_cases hle : rest.length ≤ 2 * t - 1
   · obtain ⟨hb, hh, -⟩ := node_of_good hf hr
+    simp only [InsertResult.ofNode, hle, ↓reduceIte]
     exact ⟨hb, hh, .node hlo hle hf.occupied fun e he => (hr e he).occupied⟩
-  · split
-    · next heq =>
-      rw [List.drop_eq_nil_iff] at heq
-      omega
-    · next k v c right heq =>
-      have hmem : (k, v, c) ∈ rest := List.mem_of_mem_drop (heq ▸ List.mem_cons_self ..)
-      have hright : ∀ e ∈ right, e ∈ rest := fun e he =>
-        List.mem_of_mem_drop (heq ▸ List.mem_cons_of_mem _ he)
-      have hrl : right.length + t + 1 = rest.length := by
-        have := congrArg List.length heq
-        simp only [List.length_drop, List.length_cons] at this
-        omega
-      have htl : (rest.take t).length = t := by simp; omega
-      have hl := node_of_good (rest := rest.take t) hf fun e he => hr e (List.mem_of_mem_take he)
-      have hrr := node_of_good (hr _ hmem) fun e he => hr e (hright e he)
-      refine ⟨⟨hl.1, hl.2.1, ?_⟩, ⟨hrr.1, hrr.2.1, ?_⟩⟩
-      · exact .node (by omega) (by omega) hf.occupied
-          fun e he => (hr e (List.mem_of_mem_take he)).occupied
-      · exact .node (by omega) (by omega) (hr _ hmem).occupied
-          fun e he => (hr e (hright e he)).occupied
+  · obtain ⟨l, k, v, r, heq, hl, hr'⟩ :=
+      InsertResult.exists_good_split_ofNode hf hr (by omega) (by omega)
+    rw [heq]
+    exact ⟨hl, hr'⟩
 
 /-- Placing a repaired result among good triples keeps them good, adding at most one key. -/
 theorem InsertResult.mended_withRest {x : InsertResult α β} {h : ℕ} (hx : x.Mended t h)
@@ -465,14 +500,11 @@ theorem InsertResult.mended_withRest {x : InsertResult α β} {h : ℕ} (hx : x.
   cases x with
   | tree c => exact ⟨hx, hr, le_rfl, Nat.le_succ _⟩
   | split l k v r =>
-    refine ⟨hx.1, fun e he => ?_, Nat.le_succ _, le_rfl⟩
-    simp only [InsertResult.withRest, List.mem_cons] at he
-    rcases he with rfl | he
-    exacts [hx.2, hr e he]
+    exact ⟨hx.1, List.forall_mem_cons.2 ⟨hx.2, hr⟩, Nat.le_succ _, le_rfl⟩
 
 /-- Merging two adjacent nodes of height `h + 1` with between `t - 2` and `3 * t - 3` keys in
 total gives good results. -/
-theorem mended_mergeSplit (ht : 2 ≤ t) {l r : BTree α β} {h : ℕ} (hl : Underfull t (h + 1) l)
+theorem mended_mergeSplit {l r : BTree α β} {h : ℕ} (hl : Underfull t (h + 1) l)
     (hr : Underfull t (h + 1) r) (hl₀ : l ≠ .leaf) (hr₀ : r ≠ .leaf) (k : α) (v : β)
     (hlo : t - 1 ≤ l.rootKeys + r.rootKeys + 1) (hhi : l.rootKeys + r.rootKeys + 1 ≤ 3 * t - 2) :
     (mergeSplit t l k v r).Mended t (h + 1) := by
@@ -486,34 +518,13 @@ theorem mended_mergeSplit (ht : 2 ≤ t) {l r : BTree α β} {h : ℕ} (hl : Und
     fun {c x} hc hx => ⟨hc.1.of_mem_children hx,
       by have := hc.1.height_of_mem_children hx; rw [hc.2.1] at this; omega, hc.2.2.1 x hx⟩
   simp only [rootKeys_node] at hlo hhi
-  refine InsertResult.mended_ofNode ht (hgood hl List.mem_cons_self) (fun e he => ?_)
+  refine InsertResult.mended_ofNode (hgood hl List.mem_cons_self) (fun e he => ?_)
     (by simp; omega) (by simp; omega)
   rcases List.mem_append.1 he with he | he
   · exact hgood hl (List.mem_cons_of_mem _ (List.mem_map_of_mem he))
   · rcases List.mem_cons.1 he with rfl | he
     · exact hgood hr List.mem_cons_self
     · exact hgood hr (List.mem_cons_of_mem _ (List.mem_map_of_mem he))
-
-/-- A node that underflows has exactly `t - 2` keys and positive height. -/
-theorem Underfull.of_underflows {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
-    (hu : underflows t c = true) :
-    c ≠ .leaf ∧ c.rootKeys = t - 2 ∧ 1 ≤ h := by
-  cases c with
-  | leaf => simp [underflows] at hu
-  | node f r =>
-    simp only [underflows, decide_eq_true_eq] at hu
-    have := hc.2.2.2.2 (by simp)
-    have hh := hc.1.height_node
-    rw [hc.2.1] at hh
-    simp only [rootKeys_node] at this ⊢
-    exact ⟨by simp, by omega, by omega⟩
-
-/-- A good tree of positive height is a node. -/
-theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h) : c ≠ .leaf := by
-  rintro rfl
-  have := hc.height_eq
-  simp at this
-  omega
 
 /-- Repair against the right sibling: the results are good, with one key fewer or none. -/
 theorem good_rebalanceRight (ht : 2 ≤ t) {c s : BTree α β} {h : ℕ} (hc : Underfull t h c)
@@ -523,24 +534,19 @@ theorem good_rebalanceRight (ht : 2 ≤ t) {c s : BTree α β} {h : ℕ} (hc : U
       (∀ e ∈ (rebalanceRight t c k v s rest).2, Good t h e.2.2) ∧
       rest.length ≤ (rebalanceRight t c k v s rest).2.length ∧
       (rebalanceRight t c k v s rest).2.length ≤ rest.length + 1 := by
-  rw [rebalanceRight_def]
+  rw [rebalanceRight_eq_ite]
   split
   · next hu =>
-    obtain ⟨hc₀, hck, hh⟩ := hc.of_underflows hu
+    have hck := hc.rootKeys_eq_of_underflows hu
+    have hh := hc.one_le_height_of_underflows hu
     obtain ⟨h', rfl⟩ : ∃ h', h = h' + 1 := ⟨h - 1, by omega⟩
     have hs₀ := hs.ne_leaf hh
-    have hsk := hs.underfull
-    have : t - 1 ≤ s.rootKeys := by
-      cases s with
-      | leaf => exact absurd rfl hs₀
-      | node _ _ => exact hs.occupied.le_length
-    exact InsertResult.mended_withRest
-      (mended_mergeSplit ht hc hsk hc₀ hs₀ k v (by omega) (by have := hsk.2.2.2.1; omega)) hr
+    have := hs.occupied.le_rootKeys hs₀
+    have := hs.occupied.rootKeys_le
+    exact InsertResult.mended_withRest (mended_mergeSplit hc hs.underfull
+      (ne_leaf_of_underflows hu) hs₀ k v (by omega) (by omega)) hr
   · next hu =>
-    refine ⟨hc.good (by simpa using hu), fun e he => ?_, Nat.le_succ _, le_rfl⟩
-    simp only [List.mem_cons] at he
-    rcases he with rfl | he
-    exacts [hs, hr e he]
+    exact ⟨hc.good (by simpa using hu), List.forall_mem_cons.2 ⟨hs, hr⟩, Nat.le_succ _, le_rfl⟩
 
 /-- Repair of a last child against its left sibling: the results are good, with at most one
 triple. -/
@@ -549,58 +555,51 @@ theorem good_rebalanceLast (ht : 2 ≤ t) {prev c : BTree α β} {h : ℕ} (hp :
     Good t h (rebalanceLast t prev k v c).1 ∧
       (∀ e ∈ (rebalanceLast t prev k v c).2, Good t h e.2.2) ∧
       (rebalanceLast t prev k v c).2.length ≤ 1 := by
-  rw [rebalanceLast_def]
+  rw [rebalanceLast_eq_ite]
   split
   · next hu =>
-    obtain ⟨hc₀, hck, hh⟩ := hc.of_underflows hu
+    have hck := hc.rootKeys_eq_of_underflows hu
+    have hh := hc.one_le_height_of_underflows hu
     obtain ⟨h', rfl⟩ : ∃ h', h = h' + 1 := ⟨h - 1, by omega⟩
     have hp₀ := hp.ne_leaf hh
-    have hpk := hp.underfull
-    have : t - 1 ≤ prev.rootKeys := by
-      cases prev with
-      | leaf => exact absurd rfl hp₀
-      | node _ _ => exact hp.occupied.le_length
+    have := hp.occupied.le_rootKeys hp₀
+    have := hp.occupied.rootKeys_le
     obtain ⟨h₁, h₂, -, h₃⟩ := InsertResult.mended_withRest (rest := [])
-      (mended_mergeSplit ht hpk hc hp₀ hc₀ k v (by omega) (by have := hpk.2.2.2.1; omega))
-      (by simp)
+      (mended_mergeSplit hp.underfull hc hp₀ (ne_leaf_of_underflows hu) k v (by omega)
+        (by omega)) (by simp)
     exact ⟨h₁, h₂, by simpa using h₃⟩
   · next hu =>
-    refine ⟨hp, fun e he => ?_, by simp⟩
-    simp only [List.mem_singleton] at he
-    subst he
-    exact hc.good (by simpa using hu)
+    exact ⟨hp, List.forall_mem_cons.2 ⟨hc.good (by simpa using hu), by simp⟩, by simp⟩
 
 /-- Shape of the removal of the least entry. -/
 theorem eraseFits_popMin (ht : 2 ≤ t) {tr : BTree α β} (hb : Balanced tr)
-    (ho : ∀ c ∈ tr.children, Occupied t c) (hk : tr.rootKeys ≤ 2 * t - 1)
-    (hpos : tr ≠ .leaf → 1 ≤ tr.rootKeys) {e : α × β} {tr' : BTree α β}
-    (hp : popMin t tr = some (e, tr')) : EraseFits t tr tr' := by
+    (ho : ∀ c ∈ tr.children, Occupied t c) (hpos : tr ≠ .leaf → 1 ≤ tr.rootKeys)
+    {e : α × β} {tr' : BTree α β} (hp : popMin t tr = some (e, tr')) : EraseFits t tr tr' := by
   induction tr generalizing e tr' with
   | leaf => simp at hp
   | node first rest ihf _ =>
-    have hf : Good t first.height first := ⟨hb.first, rfl, ho first List.mem_cons_self⟩
-    have hr : ∀ e ∈ rest, Good t first.height e.2.2 := fun e he =>
-      ⟨hb.of_mem_rest he, hb.height_of_mem_rest he,
-        ho _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))⟩
+    obtain ⟨hf, hr⟩ := good_of_balanced_node hb ho
     have hh := hb.height_node
     have hpos := hpos (by simp)
-    simp only [rootKeys_node] at hpos hk
+    simp only [rootKeys_node] at hpos
     rw [popMin_node] at hp
     rcases hpf : popMin t first with _ | ⟨e₁, first'⟩ <;>
       rcases rest with _ | ⟨⟨k, v, c⟩, rest⟩
     · simp at hpos
-    · simp only [hpf, Option.some.injEq, Prod.mk.injEq] at hp
+    · -- the first child is empty: the node gives up its first entry
+      simp only [hpf, Option.some.injEq, Prod.mk.injEq] at hp
       obtain ⟨-, rfl⟩ := hp
-      have hc := hr _ List.mem_cons_self
-      obtain ⟨hb', hh', hco⟩ := node_of_good hc fun e he => hr e (List.mem_cons_of_mem _ he)
+      obtain ⟨hc, hrest⟩ := List.forall_mem_cons.1 hr
+      obtain ⟨hb', hh', hco⟩ := node_of_good hc hrest
       exact ⟨hb', by rw [hh', hh], hco, by simp, by simp⟩
     · simp at hpos
-    · simp only [hpf, Option.some.injEq, Prod.mk.injEq] at hp
+    · -- the least entry comes from the first child, which is then repaired
+      simp only [hpf, Option.some.injEq, Prod.mk.injEq] at hp
       obtain ⟨-, rfl⟩ := hp
-      obtain ⟨h₁, h₂, h₃, h₄⟩ := hf.hyps ht
-      have hu := (ihf h₁ h₂ h₃ h₄ hpf).underfull hf.occupied
-      obtain ⟨g₁, g₂, l₁, l₂⟩ := good_rebalanceRight ht hu (hr _ List.mem_cons_self) k v
-        fun e he => hr e (List.mem_cons_of_mem _ he)
+      obtain ⟨hc, hrest⟩ := List.forall_mem_cons.1 hr
+      have hu := (ihf hf.balanced (fun _ hx => hf.occupied.of_mem_children hx)
+        (hf.one_le_rootKeys ht) hpf).underfull hf.occupied
+      obtain ⟨g₁, g₂, l₁, l₂⟩ := good_rebalanceRight ht hu hc k v hrest
       obtain ⟨hb', hh', hco⟩ := node_of_good g₁ g₂
       exact ⟨hb', by rw [hh', hh], hco, by simpa using l₂, by simpa using l₁⟩
 
@@ -619,7 +618,8 @@ variable {α β : Type} [LinearOrder α] {t : ℕ} {k : α}
     (rest : List (α × β × BTree α β)) : BTree α β × List (α × β × BTree α β) :=
   Id.run (eraseRestM t leI (pure ()) k prev (pure prevErased) rest)
 
-/-- Pure erasure. -/
+/-- Remove the entry with key `k`, if any, from a B-tree of minimum degree `t`: the `Id`
+instantiation of `eraseM`. An emptied root collapses into its only child. -/
 @[expose] def erase (t : ℕ) (k : α) (tr : BTree α β) : BTree α β :=
   Id.run (eraseM t leI (pure ()) k tr)
 
@@ -698,19 +698,12 @@ theorem eraseRest_spec {rest : List (α × β × BTree α β)}
     rw [toListRest_cons, List.cons_append, List.isSortedAssoc_append_cons_iff] at hs
     obtain ⟨hpre, hcl, hlt, hgt⟩ := hs
     have hcs : c.toList.IsSortedAssoc := (List.isSortedAssoc_append_iff.1 hcl).1
-    have hkeep : ∀ l : List (α × β), (∀ p ∈ l, p.1 ≠ k) → SortedAssoc.erase k l = l :=
-      fun l h => SortedAssoc.erase_of_forall_ne h
     rw [eraseRest_cons, toListRest_cons, List.cons_append]
     by_cases h₁ : k ≤ k'
     · by_cases h₂ : k' ≤ k
-      · obtain rfl : k = k' := le_antisymm h₁ h₂
-        have hdrop : ∀ X : List (α × β), (∀ p ∈ X, k < p.1) →
-            SortedAssoc.erase k (prev.toList ++ (k, v') :: X) = prev.toList ++ X := by
-          intro X hX
-          rw [SortedAssoc.erase_append, SortedAssoc.erase_cons,
-            hkeep _ fun p hp => (hlt p hp).ne, hkeep _ fun p hp => (hX p hp).ne']
-          simp
-        rw [hdrop _ hgt]
+      · -- the key is at this triple: its entry goes, replaced by the successor from its child
+        obtain rfl : k = k' := le_antisymm h₁ h₂
+        rw [SortedAssoc.erase_append_cons_self hlt hgt]
         simp only [h₁, ↓reduceIte]
         rcases hpm : popMin t c with _ | ⟨⟨k₂, v₂⟩, c'⟩
         · simp [toList_popMin.1 hpm]
@@ -722,19 +715,21 @@ theorem eraseRest_spec {rest : List (α × β × BTree α β)}
           · simp only [toListRest_cons, List.cons_append]
             rw [toList_rebalanceRight, hcm]
             simp
-      · have hk : k < k' := lt_of_le_of_ne h₁ fun h => h₂ (h ▸ le_rfl)
+      · -- the key is below this triple: erase from the child before it, then repair that child
+        have hk : k < k' := lt_of_le_of_ne h₁ fun h => h₂ (h ▸ le_rfl)
         simp only [h₁, h₂, ↓reduceIte]
         have htail : SortedAssoc.erase k ((k', v') :: (c.toList ++ toListRest rest)) =
             (k', v') :: (c.toList ++ toListRest rest) := by
-          refine hkeep _ fun p hp => ?_
+          refine SortedAssoc.erase_of_forall_ne fun p hp => ?_
           rcases List.mem_cons.1 hp with rfl | hp
           · exact hk.ne'
           · exact (hk.trans (hgt p hp)).ne'
         rw [toList_rebalanceRight, hpe hpre, toListRest_cons, SortedAssoc.erase_append, htail]
         simp
-    · have hk : k' < k := lt_of_not_ge h₁
+    · -- the key is above this triple: move on, or at the last triple erase from its child
+      have hk : k' < k := lt_of_not_ge h₁
       have hpre' : SortedAssoc.erase k prev.toList = prev.toList :=
-        hkeep _ fun p hp => ((hlt p hp).trans hk).ne
+        SortedAssoc.erase_of_forall_ne fun p hp => ((hlt p hp).trans hk).ne
       simp only [h₁, ↓reduceIte]
       rcases rest with _ | ⟨e, rest⟩
       · simp only
@@ -781,18 +776,16 @@ theorem good_eraseRest (ht : 2 ≤ t) {h : ℕ} {rest : List (α × β × BTree 
       · simp only [h₁, h₂, ↓reduceIte]
         rcases hpm : popMin t c with _ | ⟨⟨k₂, v₂⟩, c'⟩
         · exact ⟨hp, hrest, by simp, by simp⟩
-        · obtain ⟨g₁, g₂, g₃, g₄⟩ := hcg.1.hyps ht
-          have hcu := (eraseFits_popMin ht g₁ g₂ g₃ g₄ hpm).underfull hcg.1.occupied
+        · have hcu := (eraseFits_popMin ht hcg.1.balanced
+            (fun _ hx => hcg.1.occupied.of_mem_children hx) (hcg.1.one_le_rootKeys ht)
+            hpm).underfull hcg.1.occupied
           rw [hcg.1.height_eq] at hcu
           rcases rest with _ | ⟨⟨k₃, v₃, c₃⟩, rest₃⟩
           · obtain ⟨r₁, r₂, r₃⟩ := good_rebalanceLast ht hp hcu k₂ v₂
             exact ⟨r₁, r₂, by simpa using r₃, by simp⟩
           · obtain ⟨r₁, r₂, r₃, r₄⟩ := good_rebalanceRight ht hcu (hrest _ List.mem_cons_self)
               k₃ v₃ fun e he => hrest e (List.mem_cons_of_mem _ he)
-            refine ⟨hp, fun e he => ?_, by simpa using r₄, by simpa using r₃⟩
-            simp only [List.mem_cons] at he
-            rcases he with rfl | he
-            exacts [r₁, r₂ e he]
+            exact ⟨hp, List.forall_mem_cons.2 ⟨r₁, r₂⟩, by simpa using r₄, by simpa using r₃⟩
       · simp only [h₁, h₂, ↓reduceIte]
         obtain ⟨r₁, r₂, r₃, r₄⟩ := good_rebalanceRight ht hpe hcg.1 k' v' hrest
         exact ⟨r₁, r₂, by simpa using r₄, by simpa using r₃⟩
@@ -801,34 +794,32 @@ theorem good_eraseRest (ht : 2 ≤ t) {h : ℕ} {rest : List (α × β × BTree 
       · obtain ⟨r₁, r₂, r₃⟩ := good_rebalanceLast ht hp hcg.2 k' v'
         exact ⟨r₁, r₂, by simpa using r₃, by simp⟩
       · obtain ⟨r₁, r₂, r₃, r₄⟩ := ih hcg.1 hcg.2 (List.cons_ne_nil _ _)
-        refine ⟨hp, fun e he => ?_, by simpa using r₃, by simpa using r₄⟩
-        simp only [List.mem_cons] at he
-        rcases he with rfl | he
-        exacts [r₁, r₂ e he]
+        exact ⟨hp, List.forall_mem_cons.2 ⟨r₁, r₂⟩, by simpa using r₃, by simpa using r₄⟩
 
 /-- Shape invariant of erasure from a subtree. -/
 theorem eraseFits_eraseSubtree (ht : 2 ≤ t) {tr : BTree α β} (hb : Balanced tr)
-    (ho : ∀ c ∈ tr.children, Occupied t c) (hk : tr.rootKeys ≤ 2 * t - 1)
-    (hpos : tr ≠ .leaf → 1 ≤ tr.rootKeys) : EraseFits t tr (eraseSubtree t k tr) := by
+    (ho : ∀ c ∈ tr.children, Occupied t c) (hpos : tr ≠ .leaf → 1 ≤ tr.rootKeys) :
+    EraseFits t tr (eraseSubtree t k tr) := by
   induction tr with
   | leaf => exact ⟨.leaf, rfl, by simp, le_rfl, Nat.le_succ _⟩
   | node first rest ihf ihr =>
-    have hf : Good t first.height first := ⟨hb.first, rfl, ho first List.mem_cons_self⟩
-    have hr : ∀ e ∈ rest, Good t first.height e.2.2 := fun e he =>
-      ⟨hb.of_mem_rest he, hb.height_of_mem_rest he,
-        ho _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))⟩
+    obtain ⟨hf, hr⟩ := good_of_balanced_node hb ho
     have hh := hb.height_node
     have hpos := hpos (by simp)
     simp only [rootKeys_node] at hpos ⊢
     have hne : rest ≠ [] := by rintro rfl; simp at hpos
-    obtain ⟨g₁, g₂, g₃, g₄⟩ := hf.hyps ht
-    have hpe := (ihf g₁ g₂ g₃ g₄).underfull hf.occupied
+    -- erasure from a good child leaves it at most one key short
+    have hsub : ∀ {c : BTree α β}, Good t first.height c →
+        ((∀ x ∈ c.children, Occupied t x) → (c ≠ .leaf → 1 ≤ c.rootKeys) →
+          EraseFits t c (eraseSubtree t k c)) →
+        Underfull t first.height (eraseSubtree t k c) := fun {c} hc ih => by
+      have := (ih (fun _ hx => hc.occupied.of_mem_children hx)
+        (hc.one_le_rootKeys ht)).underfull hc.occupied
+      rwa [hc.height_eq] at this
+    have hpe := hsub hf (ihf hf.balanced)
     have hc : ∀ e ∈ rest, Good t first.height e.2.2 ∧
-        Underfull t first.height (eraseSubtree t k e.2.2) := fun e he => by
-      obtain ⟨g₁, g₂, g₃, g₄⟩ := (hr e he).hyps ht
-      have := (ihr e he g₁ g₂ g₃ g₄).underfull (hr e he).occupied
-      rw [(hr e he).height_eq] at this
-      exact ⟨hr e he, this⟩
+        Underfull t first.height (eraseSubtree t k e.2.2) := fun e he =>
+      ⟨hr e he, hsub (hr e he) (ihr e he (hr e he).balanced)⟩
     obtain ⟨r₁, r₂, r₃, r₄⟩ := good_eraseRest ht hc hf hpe hne
     rw [eraseSubtree_node]
     obtain ⟨hb', hh', hco⟩ := node_of_good r₁ r₂
@@ -846,7 +837,7 @@ theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
   have ht := h.two_le
   have hrk := h.rootKeys_le
   obtain ⟨hb, -, hco, hk₁, -⟩ := eraseFits_eraseSubtree (k := k) ht h.balanced
-    h.occupied_of_mem_children h.rootKeys_le h.rootKeys_pos
+    h.occupied_of_mem_children h.rootKeys_pos
   have hs : (BTree.erase t k tr).toList.IsSortedAssoc := by
     rw [toList_erase h]
     exact SortedAssoc.isSortedAssoc_erase h.sorted
@@ -856,14 +847,8 @@ theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
   · exact ⟨ht, by simp [collapse], by simp [collapse], by simp [collapse], .leaf, hs⟩
   · simp only [collapse] at hs ⊢
     have hf : Occupied t f := hco f (by simp)
-    refine ⟨ht, ?_, fun hne => ?_, fun c hc => hf.of_mem_children hc,
-      hb.of_mem_children (c := f) (by simp), hs⟩
-    · cases f with
-      | leaf => simp
-      | node _ _ => exact hf.length_le
-    · cases f with
-      | leaf => exact absurd rfl hne
-      | node _ _ => have := hf.le_length; simp only [rootKeys_node]; omega
+    exact ⟨ht, hf.rootKeys_le, fun hne => by have := hf.le_rootKeys hne; omega,
+      fun c hc => hf.of_mem_children hc, hb.of_mem_children (c := f) (by simp), hs⟩
   · simp only [collapse, rootKeys_node] at hs hk₁ ⊢
     exact ⟨ht, by simp only [rootKeys_node]; omega, fun _ => by simp, hco, hb, hs⟩
 
@@ -871,7 +856,7 @@ theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
 theorem height_erase (h : IsWF t tr) (k : α) :
     (erase t k tr).height = tr.height ∨ (erase t k tr).height + 1 = tr.height := by
   obtain ⟨hb, hh, -, -, -⟩ := eraseFits_eraseSubtree (k := k) h.two_le h.balanced
-    h.occupied_of_mem_children h.rootKeys_le h.rootKeys_pos
+    h.occupied_of_mem_children h.rootKeys_pos
   rw [erase_eq_collapse]
   generalize eraseSubtree t k tr = c at *
   rcases c with _ | ⟨f, _ | ⟨e, r⟩⟩
@@ -919,11 +904,16 @@ unchanged elsewhere. -/
     lookup k' (erase t k tr) = if k' = k then none else lookup k' tr :=
   lookup_erase_of_isSortedAssoc h.sorted k k'
 
-/-- Erasing an absent key leaves the entries unchanged. -/
-theorem toList_erase_of_lookup_eq_none (h : IsWF t tr) {k : α} (hk : lookup k tr = none) :
-    (erase t k tr).toList = tr.toList := by
-  rw [toList_erase h, SortedAssoc.erase_of_lookup_eq_none (by rwa [← lookup_eq h])]
+/-- On a tree with sorted entries, erasing an absent key leaves the entries unchanged. -/
+theorem toList_erase_of_lookup_eq_none_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) {k : α}
+    (hk : lookup k tr = none) : (erase t k tr).toList = tr.toList := by
+  rw [toList_erase_of_isSortedAssoc h,
+    SortedAssoc.erase_of_lookup_eq_none (by rwa [← lookup_eq_of_isSortedAssoc h])]
 
+/-- Erasing an absent key from a well-formed tree leaves the entries unchanged. -/
+theorem toList_erase_of_lookup_eq_none (h : IsWF t tr) {k : α} (hk : lookup k tr = none) :
+    (erase t k tr).toList = tr.toList :=
+  toList_erase_of_lookup_eq_none_of_isSortedAssoc h.sorted hk
 
 /-- Remove and return the least entry, pure. -/
 @[expose] def eraseMin? (t : ℕ) (tr : BTree α β) : Option ((α × β) × BTree α β) :=
@@ -1012,12 +1002,21 @@ example :
       tr.toList = [(1, "a"), (3, "c"), (4, "d"), (5, "e"), (6, "f"), (7, "g")] ∧ IsWF 2 tr := by
   decide
 
-/-- Erasing at the bottom of the last child merges it into its left sibling. -/
+/-- Erasing the only key of a middle child merges it with its right sibling. -/
 example :
     let tr := erase 2 3 (BTree.node (α := ℕ) (β := Unit)
       (.node .leaf [(1, (), .leaf)]) [(2, (), .node .leaf [(3, (), .leaf)]),
         (4, (), .node .leaf [(5, (), .leaf)])])
     tr.rootKeys = 1 ∧ tr.toList = [(1, ()), (2, ()), (4, ()), (5, ())] ∧ IsWF 2 tr := by
+  decide
+
+/-- Erasing the only key of the last child merges it into its left sibling. -/
+example :
+    let tr := erase 2 5 (BTree.node (α := ℕ) (β := Unit)
+      (.node .leaf [(1, (), .leaf)]) [(2, (), .node .leaf [(3, (), .leaf)]),
+        (4, (), .node .leaf [(5, (), .leaf)])])
+    tr.rootKeys = 1 ∧ tr.children.map (·.toList) = [[(1, ())], [(3, ()), (4, ())]] ∧
+      IsWF 2 tr := by
   decide
 
 /-- An absent key leaves the entries in place. -/

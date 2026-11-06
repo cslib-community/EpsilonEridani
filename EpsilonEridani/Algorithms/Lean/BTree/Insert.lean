@@ -18,7 +18,9 @@ turn when it then has `2 * t` keys (`InsertResult.ofNode`). An overflow at the r
 root (`InsertResult.toTree`), so the height grows only there. The insertion into the empty tree
 overflows at once, which makes the bottom level uniform with the rest. This is the shape of the
 classic algorithm of Bayer and McCreight; Cormen, Leiserson, Rivest and Stein, *Introduction to
-Algorithms*, Chapter 18, split full nodes pre-emptively on the way down instead.
+Algorithms*, Chapter 18, split full nodes pre-emptively on the way down instead. The tree-or-split
+result follows the functional insertion of Mündler, *A Verified Imperative Implementation of
+B-Trees*, Archive of Formal Proofs (2021), whose `up_i` it mirrors.
 
 Each operation is defined once over an arbitrary monad `m`, with a comparator
 `le : α → α → m Bool` and a node-visit action `visit : m Unit`, as in `EpsilonEridani.BTree.Lookup`.
@@ -152,6 +154,15 @@ theorem node_of_good {first : BTree α β} {rest : List (α × β × BTree α β
   rcases hx with rfl | ⟨e, he, rfl⟩
   exacts [hf.occupied, (hr e he).occupied]
 
+/-- The children of a balanced node whose children are occupied are good, of the height of
+its first child. -/
+theorem good_of_balanced_node {first : BTree α β} {rest : List (α × β × BTree α β)}
+    (hb : Balanced (.node first rest)) (ho : ∀ c ∈ (BTree.node first rest).children, Occupied t c) :
+    Good t first.height first ∧ ∀ e ∈ rest, Good t first.height e.2.2 :=
+  ⟨⟨hb.first, rfl, ho first List.mem_cons_self⟩, fun _ he =>
+    ⟨hb.of_mem_rest he, hb.height_of_mem_rest he,
+      ho _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))⟩⟩
+
 namespace InsertResult
 
 /-- A new root grown from a split of two balanced trees of equal height is balanced and one
@@ -160,6 +171,38 @@ theorem balanced_toTree_split {l r : BTree α β} (k : α) (v : β) (hl : Balanc
     (hr : Balanced r) (hh : r.height = l.height) :
     Balanced (split l k v r).toTree ∧ (split l k v r).toTree.height = l.height + 1 :=
   balanced_node_of_forall hl (by simpa using ⟨hr, hh⟩)
+
+/-- A node over good children of height `h` with more than `2 * t - 1` keys, and at most `t + 1`
+more, splits into two good trees of height `h + 1`: the first `t` keys go left, the next one is
+the median, and the rest go right. -/
+theorem exists_good_split_ofNode {first : BTree α β} {rest : List (α × β × BTree α β)}
+    {h : ℕ} (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2)
+    (hlo : 2 * t - 1 < rest.length) (hhi : rest.length ≤ 2 * t - 1 + t + 1) :
+    ∃ l k v r, ofNode t first rest = split l k v r ∧ Good t (h + 1) l ∧ Good t (h + 1) r := by
+  have hgt : ¬ rest.length ≤ 2 * t - 1 := by omega
+  unfold ofNode
+  simp only [hgt, ↓reduceIte]
+  split
+  · next heq =>
+    rw [List.drop_eq_nil_iff] at heq
+    omega
+  · next k v c right heq =>
+    have hmem : (k, v, c) ∈ rest := List.mem_of_mem_drop (heq ▸ List.mem_cons_self ..)
+    have hright : ∀ e ∈ right, e ∈ rest := fun e he =>
+      List.mem_of_mem_drop (heq ▸ List.mem_cons_of_mem _ he)
+    have hrl : right.length = rest.length - t - 1 := by
+      have := congrArg List.length heq
+      simp only [List.length_drop, List.length_cons] at this
+      omega
+    have htl : (rest.take t).length = t := by simp; omega
+    obtain ⟨hbl, hhl, -⟩ := node_of_good (rest := rest.take t) hf fun e he =>
+      hr e (List.mem_of_mem_take he)
+    obtain ⟨hbr, hhr, -⟩ := node_of_good (hr _ hmem) fun e he => hr e (hright e he)
+    refine ⟨_, k, v, _, rfl, ⟨hbl, hhl, ?_⟩, ⟨hbr, hhr, ?_⟩⟩
+    · exact .node (by omega) (by omega) hf.occupied
+        fun e he => (hr e (List.mem_of_mem_take he)).occupied
+    · exact .node (by omega) (by omega) (hr _ hmem).occupied
+        fun e he => (hr e (hright e he)).occupied
 
 /-- The shape invariant of the result of inserting into `tr`: either a tree of the same
 height with at least as many root keys, still within `2 * t - 1`, or two good trees of the
@@ -176,33 +219,15 @@ theorem fits_ofNode {tr first : BTree α β} {rest : List (α × β × BTree α 
     {h : ℕ} (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2)
     (hlen : rest.length ≤ 2 * t - 1 + 1) (htr : tr ≠ .leaf) (hh : tr.height = h + 1)
     (hk : tr.rootKeys ≤ rest.length) : (ofNode t first rest).Fits t tr := by
-  unfold ofNode
-  split_ifs with hle
+  by_cases hle : rest.length ≤ 2 * t - 1
   · obtain ⟨hb, hhn, hco⟩ := node_of_good hf hr
+    simp only [ofNode, hle, ↓reduceIte]
     exact ⟨htr, hb, hhn.trans hh.symm, hco, hk, hle⟩
   · -- the node overflowed by exactly one key
-    have hlen' : rest.length = 2 * t - 1 + 1 := by omega
-    split
-    · next heq =>
-      rw [List.drop_eq_nil_iff] at heq
-      omega
-    · next k v c right heq =>
-      have hmem : (k, v, c) ∈ rest := List.mem_of_mem_drop (heq ▸ List.mem_cons_self ..)
-      have hright : ∀ e ∈ right, e ∈ rest := fun e he =>
-        List.mem_of_mem_drop (heq ▸ List.mem_cons_of_mem _ he)
-      have hrl : right.length = rest.length - t - 1 := by
-        have := congrArg List.length heq
-        simp only [List.length_drop, List.length_cons] at this
-        omega
-      have htl : (rest.take t).length = t := by simp; omega
-      obtain ⟨hbl, hhl, -⟩ := node_of_good (rest := rest.take t) hf fun e he =>
-        hr e (List.mem_of_mem_take he)
-      obtain ⟨hbr, hhr, -⟩ := node_of_good (hr _ hmem) fun e he => hr e (hright e he)
-      refine ⟨⟨hbl, hhl.trans hh.symm, ?_⟩, ⟨hbr, hhr.trans hh.symm, ?_⟩⟩
-      · exact .node (by omega) (by omega) hf.occupied
-          fun e he => (hr e (List.mem_of_mem_take he)).occupied
-      · exact .node (by omega) (by omega) (hr _ hmem).occupied
-          fun e he => (hr e (hright e he)).occupied
+    obtain ⟨l, k, v, r, heq, hl, hr'⟩ :=
+      exists_good_split_ofNode hf hr (by omega) (by omega)
+    rw [heq]
+    exact ⟨hh ▸ hl, hh ▸ hr'⟩
 
 /-- Placing a fitting result in the place of an occupied child of height `h` among good
 triples keeps every child good, and adds at most one key. -/
@@ -525,18 +550,11 @@ theorem fits_insertOrSplit {tr : BTree α β} (hb : Balanced tr)
   induction tr with
   | leaf => exact ⟨⟨.leaf, rfl, .leaf⟩, ⟨.leaf, rfl, .leaf⟩⟩
   | node first rest ihf ihr =>
-    have hf : Good t first.height first := ⟨hb.first, rfl, ho first List.mem_cons_self⟩
-    have hr : ∀ e ∈ rest, Good t first.height e.2.2 := fun e he =>
-      ⟨hb.of_mem_rest he, hb.height_of_mem_rest he,
-        ho _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))⟩
+    obtain ⟨hf, hr⟩ := good_of_balanced_node hb ho
     -- the hypotheses of the induction, for an occupied child
     have hchild : ∀ c : BTree α β, Occupied t c →
-        (∀ c' ∈ c.children, Occupied t c') ∧ c.rootKeys ≤ 2 * t - 1 := by
-      intro c hc
-      refine ⟨fun c' hc' => hc.of_mem_children hc', ?_⟩
-      cases c with
-      | leaf => simp
-      | node _ _ => exact hc.length_le
+        (∀ c' ∈ c.children, Occupied t c') ∧ c.rootKeys ≤ 2 * t - 1 :=
+      fun _ hc => ⟨fun _ hc' => hc.of_mem_children hc', hc.rootKeys_le⟩
     have hrest : ∀ e ∈ rest, Good t first.height e.2.2 ∧
         (insertOrSplit t k v e.2.2).Fits t e.2.2 := fun e he => by
       obtain ⟨h₁, h₂⟩ := hchild _ (hr e he).occupied
