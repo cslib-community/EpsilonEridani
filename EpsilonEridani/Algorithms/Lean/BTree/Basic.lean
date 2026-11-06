@@ -545,6 +545,12 @@ theorem Occupied.le_rootKeys {c : BTree α β} (h : Occupied t c) (hne : c ≠ .
   | leaf => exact absurd rfl hne
   | node _ _ => exact h.le_length
 
+/-- An occupied node has at least one key when `2 ≤ t`. -/
+theorem Occupied.one_le_rootKeys {c : BTree α β} (ht : 2 ≤ t) (h : Occupied t c)
+    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys := by
+  have := h.le_rootKeys hne
+  omega
+
 /-- Children of an occupied tree are occupied. -/
 theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c ∈ tr.children) :
     Occupied t c := by
@@ -624,7 +630,7 @@ theorem Occupied.isWF (ht : 2 ≤ t) (ho : Occupied t c) (hb : Balanced c)
     (hs : c.toList.IsSortedAssoc) : IsWF t c where
   two_le := ht
   rootKeys_le := ho.rootKeys_le
-  rootKeys_pos hne := by have := ho.le_rootKeys hne; omega
+  rootKeys_pos := ho.one_le_rootKeys ht
   occupied_of_mem_children _ hc := ho.of_mem_children hc
   balanced := hb
   sorted := hs

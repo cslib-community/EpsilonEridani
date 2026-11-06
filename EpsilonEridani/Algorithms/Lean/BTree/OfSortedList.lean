@@ -36,11 +36,11 @@ the definitions are `@[expose]`d and `decide` evaluates bulk loading on concrete
 fuel runs out, the remaining level becomes a single node, which keeps the entries.
 
 `toList_ofSortedList` states that bulk loading keeps the entries in order, for every list and
-every `t`. On a sorted list and `2 ≤ t`, `isWF_ofSortedList` gives well-formedness and
-`height_ofSortedList_le` the height bound of `IsWF.height_le_log`; `lookup_ofSortedList` needs
-sortedness only. The proof follows a level through the rounds: `IsGrouping` is the shape of the
-group sizes (`isGrouping_groupSizes`), `GoodLevel` that of a level, and `GoodLevel.pack` takes a
-good level to a good level one taller. Costs are not stated here.
+every `t`. For `2 ≤ t`, `height_ofSortedList_le` gives the height bound of `IsWF.height_le_log`
+for every list, and on a sorted list `isWF_ofSortedList` gives well-formedness;
+`lookup_ofSortedList` needs sortedness only. The proofs follow a level through the rounds:
+`IsGrouping` is the shape of the group sizes (`isGrouping_groupSizes`), and a private invariant
+takes a level of good subtrees to one of good subtrees one level taller. Costs are not stated here.
 -/
 
 public section
@@ -423,7 +423,7 @@ private structure Shaped (t : ℕ) (tr : BTree α β) : Prop where
 private theorem Good.shaped {t h : ℕ} {tr : BTree α β} (ht : 2 ≤ t) (hg : Good t h tr) :
     Shaped t tr where
   rootKeys_le := hg.occupied.rootKeys_le
-  rootKeys_pos hne := by have := hg.occupied.le_rootKeys hne; omega
+  rootKeys_pos := hg.occupied.one_le_rootKeys ht
   occupied_of_mem_children _ hc := hg.occupied.of_mem_children hc
   balanced := hg.balanced
 

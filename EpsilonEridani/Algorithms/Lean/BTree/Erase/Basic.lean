@@ -407,9 +407,8 @@ theorem Good.underfull {c : BTree α β} {h : ℕ} (hc : Good t h c) : Underfull
 
 /-- A good node has at least one key. -/
 theorem Good.one_le_rootKeys (ht : 2 ≤ t) {c : BTree α β} {h : ℕ} (hc : Good t h c)
-    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys := by
-  have := hc.occupied.le_rootKeys hne
-  omega
+    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys :=
+  hc.occupied.one_le_rootKeys ht hne
 
 /-- A good tree of positive height is a node. -/
 theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h) : c ≠ .leaf := by
