@@ -6,7 +6,7 @@ Authors: Jesse Alama
 
 module
 
-public import EpsilonEridani.Algorithms.Lean.BTree.Erase
+public import EpsilonEridani.Algorithms.Lean.BTree.Erase.Basic
 public import EpsilonEridani.Algorithms.Lean.BTree.MinMax
 
 /-!
@@ -14,14 +14,16 @@ public import EpsilonEridani.Algorithms.Lean.BTree.MinMax
 
 `eraseMinM` and `eraseMaxM` remove and return the least and greatest entries of a B-tree: they
 find the extreme entry with `minM` or `maxM` from `EpsilonEridani.BTree.MinMax` and erase its key
-with `eraseM` from `EpsilonEridani.BTree.Erase`, over an arbitrary monad with a comparator and a
-node-visit action. The pure operations `eraseMin?` and `eraseMax?` are the `Id` instantiations
-with `leI` and `visit := pure ()`.
+with `eraseM` from `EpsilonEridani.BTree.Erase.Basic`, over an arbitrary monad with a comparator
+and a node-visit action. The pure operations `eraseMin?` and `eraseMax?` are the `Id`
+instantiations with `leI` and `visit := pure ()`.
 
 `eraseMin?_eq` and `eraseMax?_eq` are the model equations, on any tree: the first or last entry
-of `toList` together with the erasure of its key. On well-formed trees,
-`toList_of_eraseMin?_eq_some` and `toList_of_eraseMax?_eq_some` split the entries into the
-removed entry and the rest, and the rest is well-formed. Costs are not stated here.
+of `toList` together with the erasure of its key. On trees with sorted entries,
+`toList_of_eraseMin?_eq_some_of_isSortedAssoc` and `toList_of_eraseMax?_eq_some_of_isSortedAssoc`
+split the entries into the removed entry and the rest; on well-formed trees,
+`toList_of_eraseMin?_eq_some` and `toList_of_eraseMax?_eq_some` add that the rest is
+well-formed. Costs are not stated here.
 -/
 
 public section
@@ -95,40 +97,58 @@ theorem eraseMin?_eq : eraseMin? t tr = tr.toList.head?.map fun p => (p, erase t
 theorem eraseMax?_eq : eraseMax? t tr = tr.toList.getLast?.map fun p => (p, erase t p.1 tr) := by
   rw [eraseMax?_eq_map_max?, max?_eq]
 
-/-- On a well-formed tree, `eraseMin?` splits the entries into the first and the rest, and the
-rest is well-formed. -/
-theorem toList_of_eraseMin?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
-    (he : eraseMin? t tr = some (p, tr')) : tr.toList = p :: tr'.toList ∧ IsWF t tr' := by
+/-- On a tree with sorted entries, `eraseMin?` splits the entries into the first and the rest. -/
+theorem toList_of_eraseMin?_eq_some_of_isSortedAssoc (h : tr.toList.IsSortedAssoc)
+    {p : α × β} {tr' : BTree α β} (he : eraseMin? t tr = some (p, tr')) :
+    tr.toList = p :: tr'.toList := by
   rw [eraseMin?_eq, Option.map_eq_some_iff] at he
   obtain ⟨q, hq, hpq⟩ := he
   simp only [Prod.mk.injEq] at hpq
   obtain ⟨rfl, rfl⟩ := hpq
-  refine ⟨?_, h.erase _⟩
   obtain ⟨l, hl⟩ : ∃ l, tr.toList = q :: l := by
     cases hc : tr.toList with
     | nil => simp [hc] at hq
     | cons a l => simp only [hc, List.head?_cons, Option.some.injEq] at hq; exact ⟨l, hq ▸ rfl⟩
-  have hs := h.sorted
+  have hs := h
   rw [hl, List.isSortedAssoc_cons_iff] at hs
-  rw [toList_erase h, hl, SortedAssoc.erase_cons]
+  rw [toList_erase_of_isSortedAssoc h, hl, SortedAssoc.erase_cons]
   simp only [↓reduceIte]
   rw [SortedAssoc.erase_of_forall_ne fun r hr => (hs.1 r hr).ne']
+
+/-- On a tree with sorted entries, `eraseMax?` splits the entries into the rest and the last. -/
+theorem toList_of_eraseMax?_eq_some_of_isSortedAssoc (h : tr.toList.IsSortedAssoc)
+    {p : α × β} {tr' : BTree α β} (he : eraseMax? t tr = some (p, tr')) :
+    tr.toList = tr'.toList ++ [p] := by
+  rw [eraseMax?_eq, Option.map_eq_some_iff] at he
+  obtain ⟨q, hq, hpq⟩ := he
+  simp only [Prod.mk.injEq] at hpq
+  obtain ⟨rfl, rfl⟩ := hpq
+  obtain ⟨l, hl⟩ := List.getLast?_eq_some_iff.1 hq
+  have hs := h
+  rw [hl, List.isSortedAssoc_append_iff] at hs
+  rw [toList_erase_of_isSortedAssoc h, hl, SortedAssoc.erase_append,
+    SortedAssoc.erase_of_forall_ne fun r hr => (hs.2.2 r hr q (by simp)).ne]
+  simp [SortedAssoc.erase_cons]
+
+/-- On a well-formed tree, `eraseMin?` splits the entries into the first and the rest, and the
+rest is well-formed. -/
+theorem toList_of_eraseMin?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
+    (he : eraseMin? t tr = some (p, tr')) : tr.toList = p :: tr'.toList ∧ IsWF t tr' := by
+  refine ⟨toList_of_eraseMin?_eq_some_of_isSortedAssoc h.sorted he, ?_⟩
+  rw [eraseMin?_eq, Option.map_eq_some_iff] at he
+  obtain ⟨_, -, hpq⟩ := he
+  simp only [Prod.mk.injEq] at hpq
+  exact hpq.2 ▸ h.erase _
 
 /-- On a well-formed tree, `eraseMax?` splits the entries into the rest and the last, and the
 rest is well-formed. -/
 theorem toList_of_eraseMax?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
     (he : eraseMax? t tr = some (p, tr')) : tr.toList = tr'.toList ++ [p] ∧ IsWF t tr' := by
+  refine ⟨toList_of_eraseMax?_eq_some_of_isSortedAssoc h.sorted he, ?_⟩
   rw [eraseMax?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨q, hq, hpq⟩ := he
+  obtain ⟨_, -, hpq⟩ := he
   simp only [Prod.mk.injEq] at hpq
-  obtain ⟨rfl, rfl⟩ := hpq
-  refine ⟨?_, h.erase _⟩
-  obtain ⟨l, hl⟩ := List.getLast?_eq_some_iff.1 hq
-  have hs := h.sorted
-  rw [hl, List.isSortedAssoc_append_iff] at hs
-  rw [toList_erase h, hl, SortedAssoc.erase_append,
-    SortedAssoc.erase_of_forall_ne fun r hr => (hs.2.2 r hr q (by simp)).ne]
-  simp [SortedAssoc.erase_cons]
+  exact hpq.2 ▸ h.erase _
 
 /-! ### Examples -/
 

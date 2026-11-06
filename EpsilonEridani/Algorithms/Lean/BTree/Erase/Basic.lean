@@ -34,7 +34,7 @@ Each operation is defined once over an arbitrary monad `m`, with a comparator
 `popMinM` to the successor, and once more for each sibling a repair inspects, so a descent
 visits at most two nodes per level. The pure operations are the `Id` instantiations with `leI`
 and `visit := pure ()`. The extremal removals built on erasure are in
-`EpsilonEridani.BTree.EraseMinMax`.
+`EpsilonEridani.BTree.Erase.MinMax`.
 
 `eraseRestM` takes the child before the triples together with the computation of its erasure,
 so that the definitions are structurally recursive and `@[expose]`d: `decide` evaluates erasure
