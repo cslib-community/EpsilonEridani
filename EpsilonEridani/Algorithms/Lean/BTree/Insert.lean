@@ -154,6 +154,14 @@ theorem node_of_good {first : BTree α β} {rest : List (α × β × BTree α β
   rcases hx with rfl | ⟨e, he, rfl⟩
   exacts [hf.occupied, (hr e he).occupied]
 
+/-- A node with `t - 1` to `2 * t - 1` keys over good children of height `h` is good, of height
+`h + 1`. -/
+theorem good_node {first : BTree α β} {rest : List (α × β × BTree α β)} {h : ℕ}
+    (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2) (h₁ : t - 1 ≤ rest.length)
+    (h₂ : rest.length ≤ 2 * t - 1) : Good t (h + 1) (.node first rest) := by
+  obtain ⟨hb, hh, -⟩ := node_of_good hf hr
+  exact ⟨hb, hh, .node h₁ h₂ hf.occupied fun e he => (hr e he).occupied⟩
+
 /-- The children of a balanced node whose children are occupied are good, of the height of
 its first child. -/
 theorem good_of_balanced_node {first : BTree α β} {rest : List (α × β × BTree α β)}
@@ -195,14 +203,9 @@ theorem exists_good_split_ofNode {first : BTree α β} {rest : List (α × β ×
       simp only [List.length_drop, List.length_cons] at this
       omega
     have htl : (rest.take t).length = t := by simp; omega
-    obtain ⟨hbl, hhl, -⟩ := node_of_good (rest := rest.take t) hf fun e he =>
-      hr e (List.mem_of_mem_take he)
-    obtain ⟨hbr, hhr, -⟩ := node_of_good (hr _ hmem) fun e he => hr e (hright e he)
-    refine ⟨_, k, v, _, rfl, ⟨hbl, hhl, ?_⟩, ⟨hbr, hhr, ?_⟩⟩
-    · exact .node (by omega) (by omega) hf.occupied
-        fun e he => (hr e (List.mem_of_mem_take he)).occupied
-    · exact .node (by omega) (by omega) (hr _ hmem).occupied
-        fun e he => (hr e (hright e he)).occupied
+    exact ⟨_, k, v, _, rfl,
+      good_node hf (fun e he => hr e (List.mem_of_mem_take he)) (by omega) (by omega),
+      good_node (hr _ hmem) (fun e he => hr e (hright e he)) (by omega) (by omega)⟩
 
 /-- The shape invariant of the result of inserting into `tr`: either a tree of the same
 height with at least as many root keys, still within `2 * t - 1`, or two good trees of the

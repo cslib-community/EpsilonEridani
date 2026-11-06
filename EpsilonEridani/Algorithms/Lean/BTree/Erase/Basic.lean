@@ -405,12 +405,6 @@ theorem Good.underfull {c : BTree α β} {h : ℕ} (hc : Good t h c) : Underfull
   ⟨hc.balanced, hc.height_eq, fun _ hx => hc.occupied.of_mem_children hx, hc.occupied.rootKeys_le,
     fun hne => by have := hc.occupied.le_rootKeys hne; omega⟩
 
-/-- A good node has at least one key. -/
-theorem Good.one_le_rootKeys (ht : 2 ≤ t) {c : BTree α β} {h : ℕ} (hc : Good t h c)
-    (hne : c ≠ .leaf) : 1 ≤ c.rootKeys := by
-  have := hc.occupied.le_rootKeys hne
-  omega
-
 /-- A good tree of positive height is a node. -/
 theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h) : c ≠ .leaf := by
   rintro rfl
@@ -477,7 +471,7 @@ theorem Good.underfull_of_eraseFits (ht : 2 ≤ t) {c c' : BTree α β} {h : ℕ
     (hf : (∀ x ∈ c.children, Occupied t x) → (c ≠ .leaf → 1 ≤ c.rootKeys) → EraseFits t c c') :
     Underfull t h c' :=
   hc.height_eq ▸ (hf (fun _ hx => hc.occupied.of_mem_children hx)
-    (hc.one_le_rootKeys ht)).underfull hc.occupied
+    (hc.occupied.one_le_rootKeys ht)).underfull hc.occupied
 
 /-- Re-splitting a node of between `t - 1` and `2 * t - 1 + t + 1` keys (`3 * t` when `1 ≤ t`)
 over good children gives good results. -/
@@ -487,9 +481,8 @@ theorem InsertResult.mended_ofNode {first : BTree α β}
     (hhi : rest.length ≤ 2 * t - 1 + t + 1) :
     (InsertResult.ofNode t first rest).Mended t (h + 1) := by
   by_cases hle : rest.length ≤ 2 * t - 1
-  · obtain ⟨hb, hh, -⟩ := node_of_good hf hr
-    simp only [InsertResult.ofNode, hle, ↓reduceIte]
-    exact ⟨hb, hh, .node hlo hle hf.occupied fun e he => (hr e he).occupied⟩
+  · simp only [InsertResult.ofNode, hle, ↓reduceIte]
+    exact good_node hf hr hlo hle
   · obtain ⟨l, k, v, r, heq, hl, hr'⟩ :=
       InsertResult.exists_good_split_ofNode hf hr (by omega) (by omega)
     rw [heq]
@@ -849,8 +842,7 @@ theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
   · exact ⟨ht, by simp [collapse], by simp [collapse], by simp [collapse], .leaf, hs⟩
   · simp only [collapse] at hs ⊢
     have hf : Occupied t f := hco f (by simp)
-    exact ⟨ht, hf.rootKeys_le, fun hne => by have := hf.le_rootKeys hne; omega,
-      fun c hc => hf.of_mem_children hc, hb.of_mem_children (c := f) (by simp), hs⟩
+    exact hf.isWF ht (hb.of_mem_children (c := f) (by simp)) hs
   · simp only [collapse, rootKeys_node] at hs hk₁ ⊢
     exact ⟨ht, by simp only [rootKeys_node]; omega, fun _ => by simp, hco, hb, hs⟩
 

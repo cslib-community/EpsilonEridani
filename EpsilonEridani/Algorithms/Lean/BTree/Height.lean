@@ -119,23 +119,43 @@ theorem Occupied.size_le (ho : Occupied t tr) : tr.size ≤ (2 * t) ^ tr.height 
         simpa only [children_node, List.forall_mem_cons, List.forall_mem_map] using ⟨ih₁, ih₂⟩
       exact size_node_le_pow ht hm fun c hc => ih c hc (ho.of_mem_children hc)
 
-variable [LinearOrder α]
-
-/-- A non-empty well-formed tree of height `h` holds at least `2 * t ^ (h - 1) - 1` entries. -/
-theorem IsWF.le_size (h : IsWF t tr) (hne : tr ≠ .leaf) :
+/-- A non-empty balanced tree of height `h` with a key at the root and occupied children holds at
+least `2 * t ^ (h - 1) - 1` entries. Only the shape matters, not the order of the keys. -/
+theorem Balanced.le_size (hb : Balanced tr) (hk : tr ≠ .leaf → 1 ≤ tr.rootKeys)
+    (ho : ∀ c ∈ tr.children, Occupied t c) (hne : tr ≠ .leaf) :
     2 * t ^ (tr.height - 1) - 1 ≤ tr.size := by
   cases tr with
   | leaf => exact absurd rfl hne
   | node first rest =>
-    have hb := h.balanced
-    have hk := h.rootKeys_pos hne
+    have hk := hk hne
     rw [rootKeys_node] at hk
     have hc : ∀ e ∈ rest, t ^ first.height - 1 ≤ e.2.2.size := fun e he =>
       hb.height_of_mem_rest he ▸
-        (h.occupied_of_mem_rest he).pow_sub_one_le_size (hb.of_mem_rest he)
-    refine le_trans ?_ (le_size_node (h.occupied_first.pow_sub_one_le_size hb.first) hc)
+        (ho _ (List.mem_cons_of_mem _ (List.mem_map_of_mem he))).pow_sub_one_le_size
+          (hb.of_mem_rest he)
+    refine le_trans ?_
+      (le_size_node ((ho first List.mem_cons_self).pow_sub_one_le_size hb.first) hc)
     rw [hb.height_node, Nat.add_sub_cancel]
     exact Nat.sub_le_sub_right (Nat.mul_le_mul_right _ (by omega)) 1
+
+/-- The height of a balanced tree with a key at a non-empty root and occupied children is
+logarithmic in its size, for `2 ≤ t`. Only the shape matters, not the order of the keys. -/
+theorem Balanced.height_le_log (ht : 2 ≤ t) (hb : Balanced tr) (hk : tr ≠ .leaf → 1 ≤ tr.rootKeys)
+    (ho : ∀ c ∈ tr.children, Occupied t c) : tr.height ≤ Nat.log t ((tr.size + 1) / 2) + 1 := by
+  rcases eq_or_ne tr .leaf with rfl | hne
+  · simp
+  have hs := hb.le_size hk ho hne
+  have hle : t ^ (tr.height - 1) ≤ (tr.size + 1) / 2 :=
+    (Nat.le_div_iff_mul_le (by decide)).2 (by omega)
+  have := Nat.le_log_of_pow_le (by omega) hle
+  omega
+
+variable [LinearOrder α]
+
+/-- A non-empty well-formed tree of height `h` holds at least `2 * t ^ (h - 1) - 1` entries. -/
+theorem IsWF.le_size (h : IsWF t tr) (hne : tr ≠ .leaf) :
+    2 * t ^ (tr.height - 1) - 1 ≤ tr.size :=
+  h.balanced.le_size h.rootKeys_pos h.occupied_of_mem_children hne
 
 /-- A well-formed tree of height `h` holds at most `(2 * t) ^ h - 1` entries. -/
 theorem IsWF.size_le (h : IsWF t tr) : tr.size ≤ (2 * t) ^ tr.height - 1 := by
@@ -146,15 +166,8 @@ theorem IsWF.size_le (h : IsWF t tr) : tr.size ≤ (2 * t) ^ tr.height - 1 := by
       (h.occupied_of_mem_children c hc).size_le
 
 /-- The height of a well-formed tree is logarithmic in its size (Cormen et al., Theorem 18.1). -/
-theorem IsWF.height_le_log (h : IsWF t tr) : tr.height ≤ Nat.log t ((tr.size + 1) / 2) + 1 := by
-  rcases eq_or_ne tr .leaf with rfl | hne
-  · simp
-  have ht := h.two_le
-  have hs := h.le_size hne
-  have hle : t ^ (tr.height - 1) ≤ (tr.size + 1) / 2 :=
-    (Nat.le_div_iff_mul_le (by decide)).2 (by omega)
-  have := Nat.le_log_of_pow_le (by omega) hle
-  omega
+theorem IsWF.height_le_log (h : IsWF t tr) : tr.height ≤ Nat.log t ((tr.size + 1) / 2) + 1 :=
+  h.balanced.height_le_log h.two_le h.rootKeys_pos h.occupied_of_mem_children
 
 /-! ### Examples -/
 
