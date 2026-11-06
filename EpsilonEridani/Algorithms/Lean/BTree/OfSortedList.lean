@@ -12,9 +12,9 @@ public import EpsilonEridani.Algorithms.Lean.BTree.Insert
 /-!
 # Bulk loading of classic B-trees
 
-Building a B-tree of `EpsilonEridani.BTree` from a list of entries in one pass, level by level
-from the bottom, in the manner of the bulk loading of Bayer and McCreight, *Organization and
-maintenance of large ordered indexes* (1972); the shape invariants are those of Cormen,
+Bottom-up bulk loading of the B-trees of Bayer and McCreight, *Organization and maintenance of
+large ordered indexes* (1972): a tree of `EpsilonEridani.BTree` is built from a list of entries
+in one pass, level by level from the bottom. The shape invariants are those of Cormen,
 Leiserson, Rivest and Stein, *Introduction to Algorithms*, Chapter 18.
 
 A level is a first tree followed by `(key, value, tree)` triples, all of its trees of one
@@ -300,13 +300,6 @@ theorem toList_build (fuel : ℕ) (first : BTree α β) (rest : List (α × β �
       · simp
       · rw [build_of_length_le (List.cons_ne_nil e es) h, toList_node]
 
-/-- The bottom level of bulk loading has the entries of the list. -/
-theorem toListRest_map_leaf (l : List (α × β)) :
-    toListRest (l.map fun p => (p.1, p.2, (.leaf : BTree α β))) = l := by
-  induction l with
-  | nil => rfl
-  | cons p l ih => simpa using ih
-
 /-- Bulk loading keeps the entries in order, for every list and every `t`. -/
 @[simp] theorem toList_ofSortedList (t : ℕ) (l : List (α × β)) : (ofSortedList t l).toList = l := by
   rw [ofSortedList_eq_build, toList_build, toListRest_map_leaf, toList_leaf, List.nil_append]
@@ -316,7 +309,8 @@ theorem toListRest_map_leaf (l : List (α × β)) :
     (ofSortedList t l).size = l.length := by
   rw [← length_toList, toList_ofSortedList]
 
-/-- An entry belongs to a bulk-loaded tree exactly when it belongs to the list. -/
+/-- An entry belongs to a bulk-loaded tree exactly when it belongs to the list. Not `@[simp]`:
+`simp` proves it from `mem_def` and `toList_ofSortedList`. -/
 theorem mem_ofSortedList {l : List (α × β)} {p : α × β} :
     p ∈ ofSortedList t l ↔ p ∈ l := by
   rw [mem_def, toList_ofSortedList]
@@ -347,11 +341,13 @@ theorem isGrouping_groupSizes {t fuel r : ℕ} (hr : t - 1 ≤ r) (hf : r ≤ fu
       · simp only [h', ↓reduceIte]
         have := IsGrouping.cut (t := t) le_rfl (by omega) (ih (r := r - (t - 1) - 1)
           (by omega) (by omega))
-        rwa [show t - 1 + 1 + (r - (t - 1) - 1) = r by omega] at this
+        have heq : t - 1 + 1 + (r - (t - 1) - 1) = r := by omega
+        rwa [heq] at this
       · simp only [h', ↓reduceIte]
         have := IsGrouping.cut (t := t) (by omega) le_rfl (ih (r := r - (2 * t - 1) - 1)
           (by omega) (by omega))
-        rwa [show 2 * t - 1 + 1 + (r - (2 * t - 1) - 1) = r by omega] at this
+        have heq : 2 * t - 1 + 1 + (r - (2 * t - 1) - 1) = r := by omega
+        rwa [heq] at this
     · rw [groupSizes_of_le h]
       exact .last hr h
 
@@ -365,17 +361,10 @@ theorem IsGrouping.length_lt {t r : ℕ} {ss : List ℕ} (ht : 2 ≤ t) (hg : Is
 
 /-! ### Shape -/
 
-/-- A node with `t - 1` to `2 * t - 1` keys over good children of height `h` is good, of height
-`h + 1`. -/
-theorem good_node {t h : ℕ} {first : BTree α β} {rest : List (α × β × BTree α β)}
-    (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2) (h₁ : t - 1 ≤ rest.length)
-    (h₂ : rest.length ≤ 2 * t - 1) : Good t (h + 1) (.node first rest) := by
-  obtain ⟨hb, hh, -⟩ := node_of_good hf hr
-  exact ⟨hb, hh, .node h₁ h₂ hf.occupied fun e he => (hr e he).occupied⟩
-
 /-- A level of height `h`: its first tree and the children of its triples are good, of height
 `h`. -/
-structure GoodLevel (t h : ℕ) (first : BTree α β) (rest : List (α × β × BTree α β)) : Prop where
+private structure GoodLevel (t h : ℕ) (first : BTree α β) (rest : List (α × β × BTree α β)) :
+    Prop where
   /-- The first tree is good. -/
   good_first : Good t h first
   /-- The child of every triple is good. -/
@@ -397,7 +386,7 @@ theorem length_pack {t r : ℕ} {ss : List ℕ} {first : BTree α β}
       rw [pack_cons_of_drop_eq_cons ss hd, List.length_cons, List.length_cons, ih (by omega)]
 
 /-- Cutting a good level of height `h` by a grouping gives a good level of height `h + 1`. -/
-theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} {first : BTree α β}
+private theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} {first : BTree α β}
     {rest : List (α × β × BTree α β)} (hl : GoodLevel t h first rest) (hg : IsGrouping t r ss)
     (hr : rest.length = r) :
     GoodLevel t (h + 1) (pack first rest ss).1 (pack first rest ss).2 := by
@@ -423,29 +412,30 @@ theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} {first : BTree α β}
       rintro e (_ | ⟨_, he⟩)
       exacts [hl'.good_first, hl'.good_rest e he]
 
-variable [LinearOrder α]
+/-- The shape of a root at minimum degree `t`: the fields of `IsWF` but sortedness. -/
+private structure Shaped (t : ℕ) (tr : BTree α β) : Prop where
+  rootKeys_le : tr.rootKeys ≤ 2 * t - 1
+  rootKeys_pos : tr ≠ .leaf → 1 ≤ tr.rootKeys
+  occupied_of_mem_children : ∀ c ∈ tr.children, Occupied t c
+  balanced : Balanced tr
 
-/-- A good tree with sorted entries is well-formed at a minimum degree of at least `2`: the
-occupancy of a non-root node implies that of a root. -/
-theorem Good.isWF {t h : ℕ} {tr : BTree α β} (ht : 2 ≤ t) (hg : Good t h tr)
-    (hs : tr.toList.IsSortedAssoc) : IsWF t tr where
-  two_le := ht
+/-- A good tree has the shape of a root at a minimum degree of at least `2`. -/
+private theorem Good.shaped {t h : ℕ} {tr : BTree α β} (ht : 2 ≤ t) (hg : Good t h tr) :
+    Shaped t tr where
   rootKeys_le := hg.occupied.rootKeys_le
   rootKeys_pos hne := by have := hg.occupied.le_rootKeys hne; omega
   occupied_of_mem_children _ hc := hg.occupied.of_mem_children hc
   balanced := hg.balanced
-  sorted := hs
 
-/-- The rounds of bulk loading build a well-formed tree from a good level with sorted entries,
-given fuel at least its number of triples. -/
-theorem isWF_build {t h fuel : ℕ} {first : BTree α β} {rest : List (α × β × BTree α β)}
-    (ht : 2 ≤ t) (hl : GoodLevel t h first rest) (hfuel : rest.length ≤ fuel)
-    (hs : (first.toList ++ toListRest rest).IsSortedAssoc) :
-    IsWF t (build t fuel first rest) := by
+/-- The rounds of bulk loading from a good level build a tree of root shape, given fuel at least
+its number of triples. -/
+private theorem shaped_build {t h fuel : ℕ} {first : BTree α β}
+    {rest : List (α × β × BTree α β)} (ht : 2 ≤ t) (hl : GoodLevel t h first rest)
+    (hfuel : rest.length ≤ fuel) : Shaped t (build t fuel first rest) := by
   induction fuel generalizing h first rest with
   | zero =>
     rcases rest with _ | ⟨e, es⟩
-    · simpa using hl.good_first.isWF ht (by simpa using hs)
+    · simpa using hl.good_first.shaped ht
     · simp at hfuel
   | succ fuel ih =>
     rcases Nat.lt_or_ge (2 * t - 1) rest.length with hlt | hle
@@ -453,28 +443,37 @@ theorem isWF_build {t h fuel : ℕ} {first : BTree α β} {rest : List (α × β
       have hg := isGrouping_groupSizes (t := t) (fuel := rest.length) (r := rest.length)
         (by omega) le_rfl
       exact ih (hl.pack hg rfl) (by rw [length_pack hg rfl]; have := hg.length_lt ht; omega)
-        (by rwa [toList_pack])
     · rcases rest with _ | ⟨e, es⟩
-      · simpa using hl.good_first.isWF ht (by simpa using hs)
+      · simpa using hl.good_first.shaped ht
       · rw [build_of_length_le (List.cons_ne_nil e es) hle]
         obtain ⟨hb, -, hco⟩ := node_of_good hl.good_first hl.good_rest
-        exact { two_le := ht, rootKeys_le := hle, rootKeys_pos := fun _ => by simp,
-                occupied_of_mem_children := hco, balanced := hb, sorted := hs }
+        exact { rootKeys_le := hle, rootKeys_pos := fun _ => by simp,
+                occupied_of_mem_children := hco, balanced := hb }
 
-/-- Bulk loading a sorted list builds a well-formed tree at a minimum degree of at least `2`. -/
-theorem isWF_ofSortedList {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
-    IsWF t (ofSortedList t l) := by
+/-- Bulk loading builds a tree of root shape at a minimum degree of at least `2`. -/
+private theorem shaped_ofSortedList {t : ℕ} (ht : 2 ≤ t) (l : List (α × β)) :
+    Shaped t (ofSortedList t l) := by
   rw [ofSortedList_eq_build, Nat.max_eq_left ht]
-  refine isWF_build ht ⟨⟨.leaf, rfl, .leaf⟩, fun e he => ?_⟩ (by simp)
-    (by rwa [toList_leaf, List.nil_append, toListRest_map_leaf])
+  refine shaped_build ht ⟨⟨.leaf, rfl, .leaf⟩, fun e he => ?_⟩ (by simp)
   obtain ⟨p, -, rfl⟩ := List.mem_map.1 he
   exact ⟨.leaf, rfl, .leaf⟩
 
-/-- On a sorted list at a minimum degree of at least `2`, bulk loading meets the height bound of
-well-formed trees. -/
-theorem height_ofSortedList_le {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
+/-- At a minimum degree of at least `2`, bulk loading meets the height bound of well-formed
+trees, for every list: the shape does not depend on the keys. -/
+theorem height_ofSortedList_le {t : ℕ} (ht : 2 ≤ t) (l : List (α × β)) :
     (ofSortedList t l).height ≤ Nat.log t ((l.length + 1) / 2) + 1 := by
-  simpa using (isWF_ofSortedList ht h).height_le_log
+  have hs := shaped_ofSortedList ht l
+  simpa using hs.balanced.height_le_log ht hs.rootKeys_pos hs.occupied_of_mem_children
+
+variable [LinearOrder α]
+
+/-- Bulk loading a sorted list builds a well-formed tree at a minimum degree of at least `2`. -/
+theorem isWF_ofSortedList {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
+    IsWF t (ofSortedList t l) :=
+  have hs := shaped_ofSortedList ht l
+  { two_le := ht, rootKeys_le := hs.rootKeys_le, rootKeys_pos := hs.rootKeys_pos,
+    occupied_of_mem_children := hs.occupied_of_mem_children, balanced := hs.balanced,
+    sorted := by rwa [toList_ofSortedList] }
 
 /-- Lookup in a bulk-loaded sorted list is lookup in the list. -/
 @[simp] theorem lookup_ofSortedList {t : ℕ} {l : List (α × β)} (h : l.IsSortedAssoc) (k : α) :

@@ -202,6 +202,14 @@ theorem toListRest_cons :
     obtain ⟨k, v, c⟩ := e
     simp [toListRest_cons, ih]
 
+/-- A list of entries, each over an empty child, has those entries. Not `@[simp]`: the simp
+normal form of `toListRest` is the `flatMap` of `toListRest_eq_flatMap`. -/
+theorem toListRest_map_leaf (l : List (α × β)) :
+    toListRest (l.map fun p => (p.1, p.2, (leaf : BTree α β))) = l := by
+  induction l with
+  | nil => rfl
+  | cons p l ih => simpa using ih
+
 /-- The empty tree has size `0`. -/
 @[simp] theorem size_leaf : (leaf : BTree α β).size = 0 := rfl
 
@@ -610,16 +618,22 @@ theorem IsWF.sorted_of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) :
     c.toList.IsSortedAssoc :=
   h.sorted.sublist (toList_sublist_of_mem_children hc)
 
+/-- An occupied, balanced tree with sorted entries is well-formed when `2 ≤ t`: the occupancy of a
+non-root node implies the root rule. -/
+theorem Occupied.isWF (ht : 2 ≤ t) (ho : Occupied t c) (hb : Balanced c)
+    (hs : c.toList.IsSortedAssoc) : IsWF t c where
+  two_le := ht
+  rootKeys_le := ho.rootKeys_le
+  rootKeys_pos hne := by have := ho.le_rootKeys hne; omega
+  occupied_of_mem_children _ hc := ho.of_mem_children hc
+  balanced := hb
+  sorted := hs
+
 /-- Every subtree of a well-formed tree is well-formed: non-root occupancy implies the root rule
 when `2 ≤ t`. -/
-theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c := by
-  have ho := h.occupied_of_mem_children c hc
-  have ht := h.two_le
-  refine ⟨ht, ?_, fun hne => ?_, fun c' hc' => ho.of_mem_children hc',
-    h.balanced.of_mem_children hc, h.sorted_of_mem_children hc⟩
-  · exact ho.rootKeys_le
-  · have := ho.le_rootKeys hne
-    omega
+theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c :=
+  (h.occupied_of_mem_children c hc).isWF h.two_le (h.balanced.of_mem_children hc)
+    (h.sorted_of_mem_children hc)
 
 /-- Mapping over values preserves well-formedness. -/
 @[simp] theorem isWF_map (f : β → γ) : IsWF t (tr.map f) ↔ IsWF t tr := by
