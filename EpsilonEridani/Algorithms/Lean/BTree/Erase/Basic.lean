@@ -369,15 +369,31 @@ theorem toList_popMin {tr : BTree α β} :
 
 /-- A subtree of height `h` that may be one key short: balanced, with occupied children, at
 most `2 * t - 1` keys, and at least `t - 2` keys when it is a node. -/
-def Underfull (t h : ℕ) (c : BTree α β) : Prop :=
-  Balanced c ∧ c.height = h ∧ (∀ x ∈ c.children, Occupied t x) ∧ c.rootKeys ≤ 2 * t - 1 ∧
-    (c ≠ .leaf → t - 2 ≤ c.rootKeys)
+structure Underfull (t h : ℕ) (c : BTree α β) : Prop where
+  /-- The subtree is balanced. -/
+  balanced : Balanced c
+  /-- The subtree has height `h`. -/
+  height_eq : c.height = h
+  /-- Every child of the root is occupied. -/
+  children_occupied : ∀ x ∈ c.children, Occupied t x
+  /-- The root has at most `2 * t - 1` keys. -/
+  rootKeys_le : c.rootKeys ≤ 2 * t - 1
+  /-- A node root has at least `t - 2` keys. -/
+  le_rootKeys : c ≠ .leaf → t - 2 ≤ c.rootKeys
 
 /-- The shape of the result `c` of erasing from `tr`: balanced, of the same height, with
 occupied children, and at most one root key fewer. -/
-def EraseFits (t : ℕ) (tr c : BTree α β) : Prop :=
-  Balanced c ∧ c.height = tr.height ∧ (∀ x ∈ c.children, Occupied t x) ∧
-    c.rootKeys ≤ tr.rootKeys ∧ tr.rootKeys ≤ c.rootKeys + 1
+structure EraseFits (t : ℕ) (tr c : BTree α β) : Prop where
+  /-- The result is balanced. -/
+  balanced : Balanced c
+  /-- The result has the height of `tr`. -/
+  height_eq : c.height = tr.height
+  /-- Every child of the result's root is occupied. -/
+  children_occupied : ∀ x ∈ c.children, Occupied t x
+  /-- The result's root has no more keys than that of `tr`. -/
+  rootKeys_le : c.rootKeys ≤ tr.rootKeys
+  /-- The result's root has at most one key fewer than that of `tr`. -/
+  rootKeys_le_succ : tr.rootKeys ≤ c.rootKeys + 1
 
 /-- A repaired child, or a repaired pair of children around a separator, all good. -/
 def InsertResult.Mended (t h : ℕ) : InsertResult α β → Prop
@@ -405,7 +421,8 @@ theorem Good.ne_leaf {c : BTree α β} {h : ℕ} (hc : Good t h c) (hh : 1 ≤ h
 /-- A subtree that does not underflow is occupied. -/
 theorem Underfull.occupied {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
     (hu : underflows t c = false) : Occupied t c := by
-  obtain ⟨-, -, ho, hk, -⟩ := hc
+  have ho := hc.children_occupied
+  have hk := hc.rootKeys_le
   cases c with
   | leaf => exact .leaf
   | node f r =>
@@ -417,7 +434,7 @@ theorem Underfull.occupied {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
 /-- A subtree that does not underflow is good. -/
 theorem Underfull.good {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
     (hu : underflows t c = false) : Good t h c :=
-  ⟨hc.1, hc.2.1, hc.occupied hu⟩
+  ⟨hc.balanced, hc.height_eq, hc.occupied hu⟩
 
 /-- Only a node underflows. -/
 theorem ne_leaf_of_underflows {c : BTree α β} (hu : underflows t c = true) : c ≠ .leaf := by
@@ -427,7 +444,7 @@ theorem ne_leaf_of_underflows {c : BTree α β} (hu : underflows t c = true) : c
 /-- A subtree one key short that underflows has exactly `t - 2` keys. -/
 theorem Underfull.rootKeys_eq_of_underflows {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
     (hu : underflows t c = true) : c.rootKeys = t - 2 := by
-  have := hc.2.2.2.2 (ne_leaf_of_underflows hu)
+  have := hc.le_rootKeys (ne_leaf_of_underflows hu)
   cases c with
   | leaf => simp [underflows] at hu
   | node f r =>
@@ -439,18 +456,19 @@ theorem Underfull.rootKeys_eq_of_underflows {c : BTree α β} {h : ℕ} (hc : Un
 theorem Underfull.one_le_height_of_underflows {c : BTree α β} {h : ℕ} (hc : Underfull t h c)
     (hu : underflows t c = true) : 1 ≤ h := by
   have hne := ne_leaf_of_underflows hu
-  rw [← hc.2.1]
+  rw [← hc.height_eq]
   exact Nat.one_le_iff_ne_zero.2 fun h0 => hne (height_eq_zero_iff.1 h0)
 
 /-- Erasure from an occupied subtree leaves it at most one key short. -/
 theorem EraseFits.underfull {tr c : BTree α β} (hf : EraseFits t tr c) (ho : Occupied t tr) :
     Underfull t tr.height c := by
-  obtain ⟨hb, hh, hco, hk₁, hk₂⟩ := hf
-  refine ⟨hb, hh, hco, hk₁.trans ho.rootKeys_le, fun hne => ?_⟩
+  refine ⟨hf.balanced, hf.height_eq, hf.children_occupied, hf.rootKeys_le.trans ho.rootKeys_le,
+    fun hne => ?_⟩
   have htr : tr ≠ .leaf := by
     rintro rfl
-    exact hne (height_eq_zero_iff.1 (by simpa using hh))
+    exact hne (height_eq_zero_iff.1 (by simpa using hf.height_eq))
   have := ho.le_rootKeys htr
+  have := hf.rootKeys_le_succ
   omega
 
 /-- Erasure from a good subtree leaves it at most one key short, given the shape of the erasure
@@ -501,8 +519,9 @@ theorem mended_mergeSplit {l r : BTree α β} {h : ℕ} (hl : Underfull t (h + 1
   | leaf => exact absurd rfl hr₀
   | node rf rr =>
   have hgood : ∀ {c x : BTree α β}, Underfull t (h + 1) c → x ∈ c.children → Good t h x :=
-    fun {c x} hc hx => ⟨hc.1.of_mem_children hx,
-      by have := hc.1.height_of_mem_children hx; rw [hc.2.1] at this; omega, hc.2.2.1 x hx⟩
+    fun {c x} hc hx => ⟨hc.balanced.of_mem_children hx,
+      by have := hc.balanced.height_of_mem_children hx; rw [hc.height_eq] at this; omega,
+      hc.children_occupied x hx⟩
   simp only [rootKeys_node] at hlo hhi
   refine InsertResult.mended_ofNode (hgood hl List.mem_cons_self) (fun e he => ?_)
     (by simp; omega) (by simp; omega)
@@ -815,8 +834,12 @@ theorem toList_erase (h : IsWF t tr) (k : α) :
 theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
   have ht := h.two_le
   have hrk := h.rootKeys_le
-  obtain ⟨hb, -, hco, hk₁, -⟩ := eraseFits_eraseSubtree (k := k) ht h.balanced
-    h.occupied_of_mem_children h.rootKeys_pos
+  have hfit := eraseFits_eraseSubtree (k := k) ht h.balanced h.occupied_of_mem_children
+    h.rootKeys_pos
+  have hb := hfit.balanced
+  have hco := hfit.children_occupied
+  have hk₁ := hfit.rootKeys_le
+  clear hfit
   have hs : (BTree.erase t k tr).toList.IsSortedAssoc := by
     rw [toList_erase h]
     exact SortedAssoc.isSortedAssoc_erase h.sorted
@@ -834,8 +857,11 @@ theorem IsWF.erase (h : IsWF t tr) (k : α) : IsWF t (erase t k tr) := by
 /-- On a well-formed tree, erasure either keeps the height or lowers it by one. -/
 theorem height_erase (h : IsWF t tr) (k : α) :
     (erase t k tr).height = tr.height ∨ (erase t k tr).height + 1 = tr.height := by
-  obtain ⟨hb, hh, -, -, -⟩ := eraseFits_eraseSubtree (k := k) h.two_le h.balanced
-    h.occupied_of_mem_children h.rootKeys_pos
+  have hfit := eraseFits_eraseSubtree (k := k) h.two_le h.balanced h.occupied_of_mem_children
+    h.rootKeys_pos
+  have hb := hfit.balanced
+  have hh := hfit.height_eq
+  clear hfit
   rw [erase_eq_collapse]
   generalize eraseSubtree t k tr = c at *
   rcases c with _ | ⟨f, _ | ⟨e, r⟩⟩

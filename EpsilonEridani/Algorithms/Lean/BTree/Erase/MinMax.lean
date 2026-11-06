@@ -118,15 +118,38 @@ theorem eraseMin?_eq : eraseMin? t tr = tr.toList.head?.map fun p => (p, erase t
 theorem eraseMax?_eq : eraseMax? t tr = tr.toList.getLast?.map fun p => (p, erase t p.1 tr) := by
   rw [eraseMax?_eq_map_max?, max?_eq]
 
+/-- `eraseMin?` returns `p` and `tr'` exactly when `p` is the first entry and `tr'` the tree with
+its key erased. -/
+theorem eraseMin?_eq_some_iff {p : α × β} {tr' : BTree α β} :
+    eraseMin? t tr = some (p, tr') ↔ tr.toList.head? = some p ∧ tr' = erase t p.1 tr := by
+  rw [eraseMin?_eq, Option.map_eq_some_iff]
+  constructor
+  · rintro ⟨q, hq, hpq⟩
+    simp only [Prod.mk.injEq] at hpq
+    obtain ⟨rfl, rfl⟩ := hpq
+    exact ⟨hq, rfl⟩
+  · rintro ⟨hp, rfl⟩
+    exact ⟨p, hp, rfl⟩
+
+/-- `eraseMax?` returns `p` and `tr'` exactly when `p` is the last entry and `tr'` the tree with
+its key erased. -/
+theorem eraseMax?_eq_some_iff {p : α × β} {tr' : BTree α β} :
+    eraseMax? t tr = some (p, tr') ↔ tr.toList.getLast? = some p ∧ tr' = erase t p.1 tr := by
+  rw [eraseMax?_eq, Option.map_eq_some_iff]
+  constructor
+  · rintro ⟨q, hq, hpq⟩
+    simp only [Prod.mk.injEq] at hpq
+    obtain ⟨rfl, rfl⟩ := hpq
+    exact ⟨hq, rfl⟩
+  · rintro ⟨hp, rfl⟩
+    exact ⟨p, hp, rfl⟩
+
 /-- On a tree with sorted entries, `eraseMin?` splits the entries into the first and the rest. -/
 theorem toList_of_eraseMin?_eq_some_of_isSortedAssoc (h : tr.toList.IsSortedAssoc)
     {p : α × β} {tr' : BTree α β} (he : eraseMin? t tr = some (p, tr')) :
     tr.toList = p :: tr'.toList := by
-  rw [eraseMin?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨q, hq, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  obtain ⟨rfl, rfl⟩ := hpq
-  obtain ⟨l, hl⟩ : ∃ l, tr.toList = q :: l := by
+  obtain ⟨hq, rfl⟩ := eraseMin?_eq_some_iff.1 he
+  obtain ⟨l, hl⟩ : ∃ l, tr.toList = p :: l := by
     cases hc : tr.toList with
     | nil => simp [hc] at hq
     | cons a l => simp only [hc, List.head?_cons, Option.some.injEq] at hq; exact ⟨l, hq ▸ rfl⟩
@@ -140,15 +163,12 @@ theorem toList_of_eraseMin?_eq_some_of_isSortedAssoc (h : tr.toList.IsSortedAsso
 theorem toList_of_eraseMax?_eq_some_of_isSortedAssoc (h : tr.toList.IsSortedAssoc)
     {p : α × β} {tr' : BTree α β} (he : eraseMax? t tr = some (p, tr')) :
     tr.toList = tr'.toList ++ [p] := by
-  rw [eraseMax?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨q, hq, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  obtain ⟨rfl, rfl⟩ := hpq
+  obtain ⟨hq, rfl⟩ := eraseMax?_eq_some_iff.1 he
   obtain ⟨l, hl⟩ := List.getLast?_eq_some_iff.1 hq
   have hs := h
   rw [hl, List.isSortedAssoc_append_iff] at hs
   rw [toList_erase_of_isSortedAssoc h, hl, SortedAssoc.erase_append,
-    SortedAssoc.erase_of_forall_ne fun r hr => (hs.2.2 r hr q (by simp)).ne]
+    SortedAssoc.erase_of_forall_ne fun r hr => (hs.2.2 r hr p (by simp)).ne]
   simp [SortedAssoc.erase_cons]
 
 /-- On a well-formed tree, `eraseMin?` splits the entries into the first and the rest, and the
@@ -156,20 +176,14 @@ rest is well-formed. -/
 theorem toList_of_eraseMin?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
     (he : eraseMin? t tr = some (p, tr')) : tr.toList = p :: tr'.toList ∧ IsWF t tr' := by
   refine ⟨toList_of_eraseMin?_eq_some_of_isSortedAssoc h.sorted he, ?_⟩
-  rw [eraseMin?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨_, -, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  exact hpq.2 ▸ h.erase _
+  exact (eraseMin?_eq_some_iff.1 he).2 ▸ h.erase _
 
 /-- On a well-formed tree, `eraseMax?` splits the entries into the rest and the last, and the
 rest is well-formed. -/
 theorem toList_of_eraseMax?_eq_some (h : IsWF t tr) {p : α × β} {tr' : BTree α β}
     (he : eraseMax? t tr = some (p, tr')) : tr.toList = tr'.toList ++ [p] ∧ IsWF t tr' := by
   refine ⟨toList_of_eraseMax?_eq_some_of_isSortedAssoc h.sorted he, ?_⟩
-  rw [eraseMax?_eq, Option.map_eq_some_iff] at he
-  obtain ⟨_, -, hpq⟩ := he
-  simp only [Prod.mk.injEq] at hpq
-  exact hpq.2 ▸ h.erase _
+  exact (eraseMax?_eq_some_iff.1 he).2 ▸ h.erase _
 
 /-! ### Examples -/
 
