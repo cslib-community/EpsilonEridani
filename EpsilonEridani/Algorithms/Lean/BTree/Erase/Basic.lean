@@ -274,6 +274,7 @@ theorem rebalanceRight_eq_ite (c : BTree α β) (k : α) (v : β) (s : BTree α 
     rebalanceRight t c k v s rest =
       if underflows t c then (mergeSplit t c k v s).withRest rest else (c, (k, v, s) :: rest) := by
   unfold rebalanceRight rebalanceRightM
+  -- as in `popMin_node`, each branch in `Id` is the pure branch by definition
   split <;> rfl
 
 /-- Pure repair against the left sibling merges only an underflowing last child. -/
@@ -281,6 +282,7 @@ theorem rebalanceLast_eq_ite (prev : BTree α β) (k : α) (v : β) (c : BTree �
     rebalanceLast t prev k v c =
       if underflows t c then (mergeSplit t prev k v c).withRest [] else (prev, [(k, v, c)]) := by
   unfold rebalanceLast rebalanceLastM
+  -- as in `popMin_node`, each branch in `Id` is the pure branch by definition
   split <;> rfl
 
 /-- The empty tree has no least entry. -/
@@ -446,6 +448,14 @@ theorem EraseFits.underfull {tr c : BTree α β} (hf : EraseFits t tr c) (ho : O
   have := ho.le_rootKeys htr
   omega
 
+/-- Erasure from a good subtree leaves it at most one key short, given the shape of the erasure
+under the occupancy facts a good subtree provides. -/
+theorem Good.underfull_of_eraseFits (ht : 2 ≤ t) {c c' : BTree α β} {h : ℕ} (hc : Good t h c)
+    (hf : (∀ x ∈ c.children, Occupied t x) → (c ≠ .leaf → 1 ≤ c.rootKeys) → EraseFits t c c') :
+    Underfull t h c' :=
+  hc.height_eq ▸ (hf (fun _ hx => hc.occupied.of_mem_children hx)
+    (hc.one_le_rootKeys ht)).underfull hc.occupied
+
 /-- Re-splitting a node of between `t - 1` and `3 * t - 2` keys over good children gives good
 results. -/
 theorem InsertResult.mended_ofNode {first : BTree α β}
@@ -567,8 +577,7 @@ theorem eraseFits_popMin (ht : 2 ≤ t) {tr : BTree α β} (hb : Balanced tr)
       simp only [hpf, Option.some.injEq, Prod.mk.injEq] at hp
       obtain ⟨-, rfl⟩ := hp
       obtain ⟨hc, hrest⟩ := List.forall_mem_cons.1 hr
-      have hu := (ihf hf.balanced (fun _ hx => hf.occupied.of_mem_children hx)
-        (hf.one_le_rootKeys ht) hpf).underfull hf.occupied
+      have hu := hf.underfull_of_eraseFits ht fun ho hpos => ihf hf.balanced ho hpos hpf
       obtain ⟨g₁, g₂, l₁, l₂⟩ := good_rebalanceRight ht hu hc k v hrest
       obtain ⟨hb', hh', hco⟩ := node_of_good g₁ g₂
       exact ⟨hb', by rw [hh', hh], hco, by simpa using l₂, by simpa using l₁⟩
@@ -746,10 +755,8 @@ theorem good_eraseRest (ht : 2 ≤ t) {h : ℕ} {rest : List (α × β × BTree 
       · simp only [h₁, h₂, ↓reduceIte]
         rcases hpm : popMin t c with _ | ⟨⟨k₂, v₂⟩, c'⟩
         · exact ⟨hp, hrest, by simp, by simp⟩
-        · have hcu := (eraseFits_popMin ht hcg.1.balanced
-            (fun _ hx => hcg.1.occupied.of_mem_children hx) (hcg.1.one_le_rootKeys ht)
-            hpm).underfull hcg.1.occupied
-          rw [hcg.1.height_eq] at hcu
+        · have hcu := hcg.1.underfull_of_eraseFits ht fun ho hpos =>
+            eraseFits_popMin ht hcg.1.balanced ho hpos hpm
           rcases rest with _ | ⟨⟨k₃, v₃, c₃⟩, rest₃⟩
           · obtain ⟨r₁, r₂, r₃⟩ := good_rebalanceLast ht hp hcu k₂ v₂
             exact ⟨r₁, r₂, by simpa using r₃, by simp⟩
@@ -779,17 +786,10 @@ theorem eraseFits_eraseSubtree (ht : 2 ≤ t) {tr : BTree α β} (hb : Balanced 
     simp only [rootKeys_node] at hpos ⊢
     have hne : rest ≠ [] := by rintro rfl; simp at hpos
     -- erasure from a good child leaves it at most one key short
-    have hsub : ∀ {c : BTree α β}, Good t first.height c →
-        ((∀ x ∈ c.children, Occupied t x) → (c ≠ .leaf → 1 ≤ c.rootKeys) →
-          EraseFits t c (eraseSubtree t k c)) →
-        Underfull t first.height (eraseSubtree t k c) := fun {c} hc ih => by
-      have := (ih (fun _ hx => hc.occupied.of_mem_children hx)
-        (hc.one_le_rootKeys ht)).underfull hc.occupied
-      rwa [hc.height_eq] at this
-    have hpe := hsub hf (ihf hf.balanced)
+    have hpe := hf.underfull_of_eraseFits ht (ihf hf.balanced)
     have hc : ∀ e ∈ rest, Good t first.height e.2.2 ∧
         Underfull t first.height (eraseSubtree t k e.2.2) := fun e he =>
-      ⟨hr e he, hsub (hr e he) (ihr e he (hr e he).balanced)⟩
+      ⟨hr e he, (hr e he).underfull_of_eraseFits ht (ihr e he (hr e he).balanced)⟩
     obtain ⟨r₁, r₂, r₃, r₄⟩ := good_eraseRest ht hc hf hpe hne
     rw [eraseSubtree_node]
     obtain ⟨hb', hh', hco⟩ := node_of_good r₁ r₂

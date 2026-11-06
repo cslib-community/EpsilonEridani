@@ -81,12 +81,15 @@ variable {α β : Type} [LinearOrder α] {t : ℕ} {tr : BTree α β}
 /-- `eraseMin?` is the minimum together with the erasure of its key. -/
 theorem eraseMin?_eq_map_min? : eraseMin? t tr = (min? tr).map fun p => (p, erase t p.1 tr) := by
   unfold eraseMin? eraseMinM min?
+  -- In `Id`, bind is application and `pure` is the identity, so each branch of the monadic
+  -- `match` on the found entry is the corresponding branch of `Option.map` by definition.
   cases minM (m := Id) (pure ()) tr <;> rfl
 
 /-- `eraseMax?` is the maximum together with the erasure of its key. -/
 theorem eraseMax?_eq_map_max? : eraseMax? t tr = (max? tr).map fun p => (p, erase t p.1 tr) := by
   rw [max?_def]
   unfold eraseMax? eraseMaxM
+  -- as in `eraseMin?_eq_map_min?`, each branch in `Id` is the `Option.map` branch by definition
   cases maxM (m := Id) (pure ()) tr <;> rfl
 
 /-- Model equation of `eraseMin?`: the first entry and the tree with its key erased. -/
