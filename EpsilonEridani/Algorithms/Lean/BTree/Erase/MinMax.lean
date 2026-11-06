@@ -64,6 +64,16 @@ theorem eraseMaxM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr
       | none => pure none
       | some p => return some (p, ← eraseM t le visit p.1 tr)) := rfl
 
+/-- The empty tree has no least entry to remove. -/
+@[simp] theorem eraseMinM_leaf [LawfulMonad m] (t : ℕ) (le : α → α → m Bool) (visit : m Unit) :
+    eraseMinM t le visit (.leaf : BTree α β) = pure none := by
+  simp [eraseMinM_def, minM_leaf]
+
+/-- The empty tree has no greatest entry to remove. -/
+@[simp] theorem eraseMaxM_leaf [LawfulMonad m] (t : ℕ) (le : α → α → m Bool) (visit : m Unit) :
+    eraseMaxM t le visit (.leaf : BTree α β) = pure none := by
+  simp [eraseMaxM_def, maxM_leaf]
+
 end Polymorphic
 
 section Pure
@@ -91,6 +101,14 @@ theorem eraseMax?_eq_map_max? : eraseMax? t tr = (max? tr).map fun p => (p, eras
   unfold eraseMax? eraseMaxM
   -- as in `eraseMin?_eq_map_min?`, each branch in `Id` is the `Option.map` branch by definition
   cases maxM (m := Id) (pure ()) tr <;> rfl
+
+/-- The empty tree has no least entry to remove. -/
+@[simp] theorem eraseMin?_leaf : eraseMin? t (.leaf : BTree α β) = none := by
+  simp [eraseMin?_eq_map_min?]
+
+/-- The empty tree has no greatest entry to remove. -/
+@[simp] theorem eraseMax?_leaf : eraseMax? t (.leaf : BTree α β) = none := by
+  simp [eraseMax?_eq_map_max?]
 
 /-- Model equation of `eraseMin?`: the first entry and the tree with its key erased. -/
 theorem eraseMin?_eq : eraseMin? t tr = tr.toList.head?.map fun p => (p, erase t p.1 tr) := by

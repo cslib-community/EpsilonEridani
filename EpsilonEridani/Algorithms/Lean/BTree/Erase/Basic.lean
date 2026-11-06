@@ -180,6 +180,11 @@ theorem eraseM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (k : �
 @[simp] theorem eraseSubtreeM_leaf (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (k : α) :
     eraseSubtreeM t le visit k (.leaf : BTree α β) = pure .leaf := rfl
 
+/-- Erasure from the empty tree is the empty tree, without a visit. -/
+@[simp] theorem eraseM_leaf [LawfulMonad m] (t : ℕ) (le : α → α → m Bool) (visit : m Unit)
+    (k : α) : eraseM t le visit k (.leaf : BTree α β) = pure .leaf := by
+  simp [eraseM_def, collapse]
+
 /-- A node is visited once on entry, then its triples are searched. -/
 theorem eraseSubtreeM_node (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (k : α)
     (first : BTree α β) (rest : List (α × β × BTree α β)) :
@@ -616,6 +621,9 @@ theorem erase_def (tr : BTree α β) : erase t k tr = Id.run (eraseM t leI (pure
 
 /-- Erasure from the empty tree. -/
 @[simp] theorem eraseSubtree_leaf : eraseSubtree t k (.leaf : BTree α β) = .leaf := rfl
+
+/-- Erasure from the empty tree is the empty tree. -/
+@[simp] theorem erase_leaf : erase t k (.leaf : BTree α β) = .leaf := rfl
 
 /-- Erasure from a node is erasure among its triples. -/
 theorem eraseSubtree_node (first : BTree α β) (rest : List (α × β × BTree α β)) :
