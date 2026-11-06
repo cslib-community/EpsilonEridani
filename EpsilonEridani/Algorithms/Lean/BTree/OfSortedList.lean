@@ -35,8 +35,12 @@ is kept. The pure operations `pack`, `build` and `ofSortedList` are the `Id` ins
 the definitions are `@[expose]`d and `decide` evaluates bulk loading on concrete inputs; when the
 fuel runs out, the remaining level becomes a single node, which keeps the entries.
 
-`toList_ofSortedList` states that bulk loading keeps the entries in order, for every list.
-Costs are not stated here.
+`toList_ofSortedList` states that bulk loading keeps the entries in order, for every list and
+every `t`. On a sorted list and `2 ≤ t`, `isWF_ofSortedList` gives well-formedness and
+`height_ofSortedList_le` the height bound of `IsWF.height_le_log`; `lookup_ofSortedList` needs
+sortedness only. The proof follows a level through the rounds: `IsGrouping` is the shape of the
+group sizes (`isGrouping_groupSizes`), `GoodLevel` that of a level, and `GoodLevel.pack` takes a
+good level to a good level one taller. Costs are not stated here.
 -/
 
 public section
@@ -109,6 +113,7 @@ node. -/
 /-- A level with no triples is its first tree. -/
 @[simp] theorem buildM_nil (t : ℕ) (visit : m Unit) (fuel : ℕ) (first : BTree α β) :
     buildM t visit fuel first [] = pure first := by
+  -- `buildM` matches on the fuel as well, so each fuel case unfolds by `rfl`
   cases fuel <;> rfl
 
 /-- A round of bulk loading on a level with triples. -/
@@ -122,6 +127,7 @@ theorem buildM_cons (t : ℕ) (visit : m Unit) (fuel : ℕ) (first : BTree α β
         | fuel + 1 => do
           let p ← packM visit first (e :: es) (groupSizes t (e :: es).length (e :: es).length)
           buildM t visit fuel p.1 p.2) := by
+  -- `buildM` matches on the fuel as well, so each fuel case unfolds by `rfl`
   cases fuel <;> rfl
 
 /-- Bulk loading at minimum degree `t`, or `2` when `t` is below `2`: the rounds of `buildM`
@@ -201,6 +207,7 @@ theorem build_of_length_le {fuel : ℕ} {first : BTree α β} {rest : List (α �
     build t fuel first rest = .node first rest := by
   obtain ⟨e, es, rfl⟩ := List.exists_cons_of_ne_nil hne
   simp only [build, buildM_cons, h, ↓reduceIte]
+  -- `Id.run` of `visit; pure` with `visit := pure ()` is the node, by `Id` defeq
   rfl
 
 /-- Out of fuel, a level of more than `2 * t - 1` triples becomes one node. -/
@@ -209,6 +216,7 @@ theorem build_zero_of_lt {first : BTree α β} {rest : List (α × β × BTree �
   obtain ⟨e, es, rfl⟩ :=
     List.exists_cons_of_ne_nil (List.ne_nil_of_length_pos (Nat.zero_lt_of_lt h))
   simp only [build, buildM_cons, Nat.not_le.2 h, ↓reduceIte]
+  -- the remaining `match` on the fuel and the `Id` binds reduce by `rfl`
   rfl
 
 /-- A level of more than `2 * t - 1` triples is cut by `groupSizes` into the next level. -/
@@ -220,6 +228,7 @@ theorem build_succ_of_lt {fuel : ℕ} {first : BTree α β} {rest : List (α × 
   obtain ⟨e, es, rfl⟩ :=
     List.exists_cons_of_ne_nil (List.ne_nil_of_length_pos (Nat.zero_lt_of_lt h))
   simp only [build, buildM_cons, Nat.not_le.2 h, ↓reduceIte]
+  -- the remaining `match` on the fuel and the `Id` binds reduce by `rfl`
   rfl
 
 /-- Bulk loading runs the rounds of `build` at minimum degree `max t 2`. -/
@@ -268,7 +277,7 @@ theorem toList_build (fuel : ℕ) (first : BTree α β) (rest : List (α × β �
       · rw [build_of_length_le (List.cons_ne_nil e es) h, toList_node]
 
 /-- The bottom level of bulk loading has the entries of the list. -/
-@[simp] theorem toListRest_map_leaf (l : List (α × β)) :
+theorem toListRest_map_leaf (l : List (α × β)) :
     toListRest (l.map fun p => (p.1, p.2, (.leaf : BTree α β))) = l := by
   induction l with
   | nil => rfl
@@ -280,10 +289,10 @@ theorem toList_build (fuel : ℕ) (first : BTree α β) (rest : List (α × β �
 
 /-- Bulk loading keeps the number of entries. -/
 @[simp] theorem size_ofSortedList (l : List (α × β)) : (ofSortedList t l).size = l.length := by
-  rw [size, toList_ofSortedList]
+  rw [← length_toList, toList_ofSortedList]
 
 /-- An entry belongs to a bulk-loaded tree exactly when it belongs to the list. -/
-@[simp] theorem mem_ofSortedList {l : List (α × β)} {p : α × β} :
+theorem mem_ofSortedList {l : List (α × β)} {p : α × β} :
     p ∈ ofSortedList t l ↔ p ∈ l := by
   rw [mem_def, toList_ofSortedList]
 
@@ -374,7 +383,7 @@ theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} (hg : IsGrouping t r ss) :
         ⟨hl.good_rest _ (hmem _ List.mem_cons_self),
           fun e he => hl.good_rest e (hmem e (List.mem_cons_of_mem _ he))⟩ (by omega)
       refine ⟨⟨good_node hl.good_first (fun e he => hl.good_rest e (List.mem_of_mem_take he))
-        (by simp; omega) (by simp; omega), ?_⟩, by simp [hlen']⟩
+        (by rw [List.length_take]; omega) (by rw [List.length_take]; omega), ?_⟩, by simp [hlen']⟩
       rintro e (_ | ⟨_, he⟩)
       exacts [hl'.good_first, hl'.good_rest e he]
 
@@ -405,10 +414,9 @@ theorem isWF_build {t h fuel : ℕ} {first : BTree α β} {rest : List (α × β
   | succ fuel ih =>
     rcases Nat.lt_or_ge (2 * t - 1) rest.length with hlt | hle
     · rw [build_succ_of_lt hlt]
-      obtain ⟨hl', hlen⟩ :=
-        hl.pack (isGrouping_groupSizes (t := t) (fuel := rest.length) (by omega) le_rfl) rfl
       have hg := isGrouping_groupSizes (t := t) (fuel := rest.length) (r := rest.length)
         (by omega) le_rfl
+      obtain ⟨hl', hlen⟩ := hl.pack hg rfl
       exact ih hl' (by have := hg.length_lt ht; omega) (by rwa [toList_pack])
     · rcases rest with _ | ⟨e, es⟩
       · simpa using hl.good_first.isWF ht (by simpa using hs)

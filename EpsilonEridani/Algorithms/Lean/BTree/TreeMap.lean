@@ -41,8 +41,7 @@ theorem toList_ofList_of_isSortedAssoc {l : List (α × β)} (h : l.IsSortedAsso
     · obtain ⟨⟨k', v'⟩, hm, rfl⟩ := List.mem_map.1 (List.contains_iff_mem.1 hc)
       rw [hof hm, Option.some_inj] at hk
       exact hk ▸ hm
-    · rw [getElem?_ofList_of_contains_eq_false (Bool.eq_false_iff.2 hc)] at hk
-      exact absurd hk (by simp)
+    · simp [getElem?_ofList_of_contains_eq_false (Bool.eq_false_iff.2 hc)] at hk
 
 end Std.TreeMap
 
