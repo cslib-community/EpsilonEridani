@@ -524,6 +524,19 @@ theorem Occupied.le_length (h : Occupied t (.node fst rest)) : t - 1 ≤ rest.le
   cases h
   assumption
 
+/-- An occupied tree has at most `2 * t - 1` root keys. -/
+theorem Occupied.rootKeys_le {c : BTree α β} (h : Occupied t c) : c.rootKeys ≤ 2 * t - 1 := by
+  cases c with
+  | leaf => simp
+  | node _ _ => exact h.length_le
+
+/-- An occupied node has at least `t - 1` root keys. -/
+theorem Occupied.le_rootKeys {c : BTree α β} (h : Occupied t c) (hne : c ≠ .leaf) :
+    t - 1 ≤ c.rootKeys := by
+  cases c with
+  | leaf => exact absurd rfl hne
+  | node _ _ => exact h.le_length
+
 /-- Children of an occupied tree are occupied. -/
 theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c ∈ tr.children) :
     Occupied t c := by
@@ -604,15 +617,9 @@ theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c
   have ht := h.two_le
   refine ⟨ht, ?_, fun hne => ?_, fun c' hc' => ho.of_mem_children hc',
     h.balanced.of_mem_children hc, h.sorted_of_mem_children hc⟩
-  · cases c with
-    | leaf => simp
-    | node first rest => exact ho.length_le
-  · cases c with
-    | leaf => exact absurd rfl hne
-    | node first rest =>
-      have := ho.le_length
-      rw [rootKeys_node]
-      omega
+  · exact ho.rootKeys_le
+  · have := ho.le_rootKeys hne
+    omega
 
 /-- Mapping over values preserves well-formedness. -/
 @[simp] theorem isWF_map (f : β → γ) : IsWF t (tr.map f) ↔ IsWF t tr := by

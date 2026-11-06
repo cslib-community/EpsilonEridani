@@ -500,6 +500,14 @@ theorem insert_append_of_forall_gt (h : ∀ p ∈ l₂, k < p.1) :
 
 /-! ### Erasure on sorted lists -/
 
+/-- Erasing a key that sits between a prefix of smaller keys and a suffix of larger ones removes
+exactly that entry. -/
+theorem erase_append_cons_self (h₁ : ∀ p ∈ l₁, p.1 < k) (h₂ : ∀ p ∈ l₂, k < p.1) :
+    erase k (l₁ ++ (k, v) :: l₂) = l₁ ++ l₂ := by
+  rw [erase_append, erase_cons, erase_of_forall_ne fun p hp => (h₁ p hp).ne,
+    erase_of_forall_ne fun p hp => (h₂ p hp).ne']
+  simp
+
 /-- Erasure preserves sortedness. -/
 theorem isSortedAssoc_erase (h : l.IsSortedAssoc) : (erase k l).IsSortedAssoc :=
   h.filter _
