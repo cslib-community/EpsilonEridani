@@ -60,6 +60,24 @@ A group has `2 * t - 1` triples unless that would leave fewer than `t - 1`, then
       let s := if r < 3 * t - 1 then t - 1 else 2 * t - 1
       s :: groupSizes t fuel (r - s - 1)
 
+/-- Out of fuel, no group is cut. -/
+@[simp] theorem groupSizes_zero (t r : ℕ) : groupSizes t 0 r = [] := rfl
+
+/-- At most `2 * t - 1` triples form the last group, and no group is cut. -/
+@[simp] theorem groupSizes_of_le {t fuel r : ℕ} (h : r ≤ 2 * t - 1) :
+    groupSizes t fuel r = [] := by
+  cases fuel with
+  | zero => rfl
+  | succ fuel => simp only [groupSizes, h, ↓reduceIte]
+
+/-- More than `2 * t - 1` triples: cut a group of `t - 1` when one of `2 * t - 1` would leave
+fewer than `t - 1` triples, and otherwise one of `2 * t - 1`. -/
+theorem groupSizes_succ_of_lt {t fuel r : ℕ} (h : 2 * t - 1 < r) :
+    groupSizes t (fuel + 1) r =
+      (if r < 3 * t - 1 then t - 1 else 2 * t - 1) ::
+        groupSizes t fuel (r - (if r < 3 * t - 1 then t - 1 else 2 * t - 1) - 1) := by
+  simp only [groupSizes, Nat.not_le.2 h, ↓reduceIte]
+
 section Polymorphic
 
 variable {α β : Type} {m : Type → Type w} [Monad m]
@@ -178,7 +196,9 @@ theorem ofSortedList_def (l : List (α × β)) :
 
 /-- With no sizes left, the whole level is one node. -/
 @[simp] theorem pack_nil (first : BTree α β) (rest : List (α × β × BTree α β)) :
-    pack first rest [] = (.node first rest, []) := rfl
+    pack first rest [] = (.node first rest, []) :=
+  -- `Id.run` of `visit; pure` with `visit := pure ()` is the pair, by `Id` defeq
+  rfl
 
 /-- Cutting at a size beyond the level leaves the whole level as one node. -/
 theorem pack_cons_of_drop_eq_nil {first : BTree α β} {rest : List (α × β × BTree α β)} {s : ℕ}
@@ -233,10 +253,14 @@ theorem build_succ_of_lt {fuel : ℕ} {first : BTree α β} {rest : List (α × 
 
 /-- Bulk loading runs the rounds of `build` at minimum degree `max t 2`. -/
 theorem ofSortedList_eq_build (l : List (α × β)) :
-    ofSortedList t l = build (max t 2) l.length .leaf (l.map fun p => (p.1, p.2, .leaf)) := rfl
+    ofSortedList t l = build (max t 2) l.length .leaf (l.map fun p => (p.1, p.2, .leaf)) :=
+  -- both sides are `Id.run` of the same `buildM` call, by `Id` defeq
+  rfl
 
 /-- Bulk loading the empty list builds the empty tree. -/
-@[simp] theorem ofSortedList_nil : ofSortedList t ([] : List (α × β)) = .leaf := rfl
+@[simp] theorem ofSortedList_nil : ofSortedList t ([] : List (α × β)) = .leaf :=
+  -- `Id.run (pure .leaf)` is `.leaf`, by `Id` defeq
+  rfl
 
 /-! ### Entries -/
 
@@ -288,7 +312,8 @@ theorem toListRest_map_leaf (l : List (α × β)) :
   rw [ofSortedList_eq_build, toList_build, toListRest_map_leaf, toList_leaf, List.nil_append]
 
 /-- Bulk loading keeps the number of entries. -/
-@[simp] theorem size_ofSortedList (l : List (α × β)) : (ofSortedList t l).size = l.length := by
+@[simp] theorem size_ofSortedList (t : ℕ) (l : List (α × β)) :
+    (ofSortedList t l).size = l.length := by
   rw [← length_toList, toList_ofSortedList]
 
 /-- An entry belongs to a bulk-loaded tree exactly when it belongs to the list. -/
@@ -314,12 +339,10 @@ least `r`. -/
 theorem isGrouping_groupSizes {t fuel r : ℕ} (hr : t - 1 ≤ r) (hf : r ≤ fuel) :
     IsGrouping t r (groupSizes t fuel r) := by
   induction fuel generalizing r with
-  | zero => exact .last hr (by omega)
+  | zero => exact groupSizes_zero t r ▸ .last hr (by omega)
   | succ fuel ih =>
-    by_cases h : r ≤ 2 * t - 1
-    · simp only [groupSizes, h, ↓reduceIte]
-      exact .last hr h
-    · simp only [groupSizes, h, ↓reduceIte]
+    rcases Nat.lt_or_ge (2 * t - 1) r with h | h
+    · rw [groupSizes_succ_of_lt h]
       by_cases h' : r < 3 * t - 1
       · simp only [h', ↓reduceIte]
         have := IsGrouping.cut (t := t) le_rfl (by omega) (ih (r := r - (t - 1) - 1)
@@ -329,6 +352,8 @@ theorem isGrouping_groupSizes {t fuel r : ℕ} (hr : t - 1 ≤ r) (hf : r ≤ fu
         have := IsGrouping.cut (t := t) (by omega) le_rfl (ih (r := r - (2 * t - 1) - 1)
           (by omega) (by omega))
         rwa [show 2 * t - 1 + 1 + (r - (2 * t - 1) - 1) = r by omega] at this
+    · rw [groupSizes_of_le h]
+      exact .last hr h
 
 /-- At minimum degree at least `2`, a grouping has fewer sizes than triples: every group but the
 last takes at least two triples with the one after it, and the last at least one. -/
@@ -344,9 +369,9 @@ theorem IsGrouping.length_lt {t r : ℕ} {ss : List ℕ} (ht : 2 ≤ t) (hg : Is
 `h + 1`. -/
 theorem good_node {t h : ℕ} {first : BTree α β} {rest : List (α × β × BTree α β)}
     (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2) (h₁ : t - 1 ≤ rest.length)
-    (h₂ : rest.length ≤ 2 * t - 1) : Good t (h + 1) (.node first rest) :=
-  have hn := node_of_good hf hr
-  ⟨hn.1, hn.2.1, .node h₁ h₂ hf.occupied fun e he => (hr e he).occupied⟩
+    (h₂ : rest.length ≤ 2 * t - 1) : Good t (h + 1) (.node first rest) := by
+  obtain ⟨hb, hh, -⟩ := node_of_good hf hr
+  exact ⟨hb, hh, .node h₁ h₂ hf.occupied fun e he => (hr e he).occupied⟩
 
 /-- A level of height `h`: its first tree and the children of its triples are good, of height
 `h`. -/
@@ -356,20 +381,31 @@ structure GoodLevel (t h : ℕ) (first : BTree α β) (rest : List (α × β × 
   /-- The child of every triple is good. -/
   good_rest : ∀ e ∈ rest, Good t h e.2.2
 
-/-- Cutting a good level of height `h` by a grouping gives a good level of height `h + 1`, with
-one triple per size. -/
-theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} (hg : IsGrouping t r ss) :
-    ∀ {first : BTree α β} {rest : List (α × β × BTree α β)}, GoodLevel t h first rest →
-      rest.length = r →
-      GoodLevel t (h + 1) (pack first rest ss).1 (pack first rest ss).2 ∧
-        (pack first rest ss).2.length = ss.length := by
-  induction hg with
+/-- Cutting a level by a grouping gives one triple per size. -/
+theorem length_pack {t r : ℕ} {ss : List ℕ} {first : BTree α β}
+    {rest : List (α × β × BTree α β)} (hg : IsGrouping t r ss) (hr : rest.length = r) :
+    (pack first rest ss).2.length = ss.length := by
+  induction hg generalizing first rest with
+  | last => rfl
+  | @cut s r ss _ _ _ ih =>
+    rcases hd : rest.drop s with _ | ⟨⟨k, v, c⟩, rest'⟩
+    · have := congrArg List.length hd
+      simp only [List.length_drop, List.length_nil] at this
+      omega
+    · have := congrArg List.length hd
+      simp only [List.length_drop, List.length_cons] at this
+      rw [pack_cons_of_drop_eq_cons ss hd, List.length_cons, List.length_cons, ih (by omega)]
+
+/-- Cutting a good level of height `h` by a grouping gives a good level of height `h + 1`. -/
+theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} {first : BTree α β}
+    {rest : List (α × β × BTree α β)} (hl : GoodLevel t h first rest) (hg : IsGrouping t r ss)
+    (hr : rest.length = r) :
+    GoodLevel t (h + 1) (pack first rest ss).1 (pack first rest ss).2 := by
+  induction hg generalizing first rest with
   | last h₁ h₂ =>
-    intro first rest hl hr
     rw [pack_nil]
-    exact ⟨⟨good_node hl.good_first hl.good_rest (by omega) (by omega), by simp⟩, rfl⟩
+    exact ⟨good_node hl.good_first hl.good_rest (by omega) (by omega), by simp⟩
   | @cut s r ss h₁ h₂ _ ih =>
-    intro first rest hl hr
     rcases hd : rest.drop s with _ | ⟨⟨k, v, c⟩, rest'⟩
     · have := congrArg List.length hd
       simp only [List.length_drop, List.length_nil] at this
@@ -379,11 +415,11 @@ theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} (hg : IsGrouping t r ss) :
       rw [hd] at hmem
       have hlen := congrArg List.length hd
       simp only [List.length_drop, List.length_cons] at hlen
-      obtain ⟨hl', hlen'⟩ := ih (first := c) (rest := rest')
+      have hl' := ih (first := c) (rest := rest')
         ⟨hl.good_rest _ (hmem _ List.mem_cons_self),
           fun e he => hl.good_rest e (hmem e (List.mem_cons_of_mem _ he))⟩ (by omega)
-      refine ⟨⟨good_node hl.good_first (fun e he => hl.good_rest e (List.mem_of_mem_take he))
-        (by rw [List.length_take]; omega) (by rw [List.length_take]; omega), ?_⟩, by simp [hlen']⟩
+      refine ⟨good_node hl.good_first (fun e he => hl.good_rest e (List.mem_of_mem_take he))
+        (by rw [List.length_take]; omega) (by rw [List.length_take]; omega), ?_⟩
       rintro e (_ | ⟨_, he⟩)
       exacts [hl'.good_first, hl'.good_rest e he]
 
@@ -416,13 +452,14 @@ theorem isWF_build {t h fuel : ℕ} {first : BTree α β} {rest : List (α × β
     · rw [build_succ_of_lt hlt]
       have hg := isGrouping_groupSizes (t := t) (fuel := rest.length) (r := rest.length)
         (by omega) le_rfl
-      obtain ⟨hl', hlen⟩ := hl.pack hg rfl
-      exact ih hl' (by have := hg.length_lt ht; omega) (by rwa [toList_pack])
+      exact ih (hl.pack hg rfl) (by rw [length_pack hg rfl]; have := hg.length_lt ht; omega)
+        (by rwa [toList_pack])
     · rcases rest with _ | ⟨e, es⟩
       · simpa using hl.good_first.isWF ht (by simpa using hs)
       · rw [build_of_length_le (List.cons_ne_nil e es) hle]
-        have hn := node_of_good hl.good_first hl.good_rest
-        exact ⟨ht, hle, fun _ => by simp, hn.2.2, hn.1, hs⟩
+        obtain ⟨hb, -, hco⟩ := node_of_good hl.good_first hl.good_rest
+        exact { two_le := ht, rootKeys_le := hle, rootKeys_pos := fun _ => by simp,
+                occupied_of_mem_children := hco, balanced := hb, sorted := hs }
 
 /-- Bulk loading a sorted list builds a well-formed tree at a minimum degree of at least `2`. -/
 theorem isWF_ofSortedList {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
@@ -433,7 +470,8 @@ theorem isWF_ofSortedList {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.
   obtain ⟨p, -, rfl⟩ := List.mem_map.1 he
   exact ⟨.leaf, rfl, .leaf⟩
 
-/-- A bulk-loaded tree meets the height bound of well-formed trees. -/
+/-- On a sorted list at a minimum degree of at least `2`, bulk loading meets the height bound of
+well-formed trees. -/
 theorem height_ofSortedList_le {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
     (ofSortedList t l).height ≤ Nat.log t ((l.length + 1) / 2) + 1 := by
   simpa using (isWF_ofSortedList ht h).height_le_log
@@ -447,6 +485,7 @@ end Pure
 
 /-! ### Examples -/
 
+/-- The empty list builds the empty tree. -/
 example : ofSortedList 2 ([] : List (ℕ × Unit)) = .leaf := rfl
 
 /-- `2 * t - 1 = 3` entries: a single root. -/

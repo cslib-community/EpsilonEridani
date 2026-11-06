@@ -7,7 +7,8 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.OfSortedList
-public import Std.Data.TreeMap.Lemmas
+public import Std.Data.TreeMap.Basic
+import Std.Data.TreeMap.Lemmas
 
 /-!
 # Bulk loading and `Std.TreeMap`
