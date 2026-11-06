@@ -617,15 +617,9 @@ theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c
   have ht := h.two_le
   refine ⟨ht, ?_, fun hne => ?_, fun c' hc' => ho.of_mem_children hc',
     h.balanced.of_mem_children hc, h.sorted_of_mem_children hc⟩
-  · cases c with
-    | leaf => simp
-    | node first rest => exact ho.length_le
-  · cases c with
-    | leaf => exact absurd rfl hne
-    | node first rest =>
-      have := ho.le_length
-      rw [rootKeys_node]
-      omega
+  · exact ho.rootKeys_le
+  · have := ho.le_rootKeys hne
+    omega
 
 /-- Mapping over values preserves well-formedness. -/
 @[simp] theorem isWF_map (f : β → γ) : IsWF t (tr.map f) ↔ IsWF t tr := by

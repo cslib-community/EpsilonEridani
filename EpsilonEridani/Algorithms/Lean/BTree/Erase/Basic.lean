@@ -456,12 +456,13 @@ theorem Good.underfull_of_eraseFits (ht : 2 ≤ t) {c c' : BTree α β} {h : ℕ
   hc.height_eq ▸ (hf (fun _ hx => hc.occupied.of_mem_children hx)
     (hc.one_le_rootKeys ht)).underfull hc.occupied
 
-/-- Re-splitting a node of between `t - 1` and `3 * t - 2` keys over good children gives good
-results. -/
+/-- Re-splitting a node of between `t - 1` and `2 * t - 1 + t + 1` keys (`3 * t` when `1 ≤ t`)
+over good children gives good results. -/
 theorem InsertResult.mended_ofNode {first : BTree α β}
     {rest : List (α × β × BTree α β)} {h : ℕ} (hf : Good t h first)
     (hr : ∀ e ∈ rest, Good t h e.2.2) (hlo : t - 1 ≤ rest.length)
-    (hhi : rest.length ≤ 3 * t - 2) : (InsertResult.ofNode t first rest).Mended t (h + 1) := by
+    (hhi : rest.length ≤ 2 * t - 1 + t + 1) :
+    (InsertResult.ofNode t first rest).Mended t (h + 1) := by
   by_cases hle : rest.length ≤ 2 * t - 1
   · obtain ⟨hb, hh, -⟩ := node_of_good hf hr
     simp only [InsertResult.ofNode, hle, ↓reduceIte]
