@@ -6,6 +6,7 @@ Authors: Jesse Alama
 
 module
 
+public import EpsilonEridani.Algorithms.Lean.BTree.Height
 public import EpsilonEridani.Algorithms.Lean.BTree.Insert
 
 /-!
@@ -266,12 +267,16 @@ theorem toList_build (fuel : ℕ) (first : BTree α β) (rest : List (α × β �
       · simp
       · rw [build_of_length_le (List.cons_ne_nil e es) h, toList_node]
 
-/-- Bulk loading keeps the entries in order, for every list and every `t`. -/
-@[simp] theorem toList_ofSortedList (t : ℕ) (l : List (α × β)) : (ofSortedList t l).toList = l := by
-  rw [ofSortedList_eq_build, toList_build]
+/-- The bottom level of bulk loading has the entries of the list. -/
+@[simp] theorem toListRest_map_leaf (l : List (α × β)) :
+    toListRest (l.map fun p => (p.1, p.2, (.leaf : BTree α β))) = l := by
   induction l with
   | nil => rfl
   | cons p l ih => simpa using ih
+
+/-- Bulk loading keeps the entries in order, for every list and every `t`. -/
+@[simp] theorem toList_ofSortedList (t : ℕ) (l : List (α × β)) : (ofSortedList t l).toList = l := by
+  rw [ofSortedList_eq_build, toList_build, toListRest_map_leaf, toList_leaf, List.nil_append]
 
 /-- Bulk loading keeps the number of entries. -/
 @[simp] theorem size_ofSortedList (l : List (α × β)) : (ofSortedList t l).size = l.length := by
@@ -281,6 +286,154 @@ theorem toList_build (fuel : ℕ) (first : BTree α β) (rest : List (α × β �
 @[simp] theorem mem_ofSortedList {l : List (α × β)} {p : α × β} :
     p ∈ ofSortedList t l ↔ p ∈ l := by
   rw [mem_def, toList_ofSortedList]
+
+
+/-! ### Group sizes -/
+
+/-- `IsGrouping t r ss`: the `r` triples of a level are cut into groups of `t - 1` to
+`2 * t - 1` triples with one triple between consecutive groups, the groups but the last having
+the sizes `ss`. -/
+inductive IsGrouping (t : ℕ) : ℕ → List ℕ → Prop
+  /-- The last group, of `t - 1` to `2 * t - 1` triples. -/
+  | last {r : ℕ} : t - 1 ≤ r → r ≤ 2 * t - 1 → IsGrouping t r []
+  /-- A group of `s` triples, the triple after it, and a grouping of the remaining `r`. -/
+  | cut {s r : ℕ} {ss : List ℕ} : t - 1 ≤ s → s ≤ 2 * t - 1 → IsGrouping t r ss →
+      IsGrouping t (s + 1 + r) (s :: ss)
+
+/-- `groupSizes` cuts `r` triples, at least `t - 1` of them, into a grouping, given fuel at
+least `r`. -/
+theorem isGrouping_groupSizes {t fuel r : ℕ} (hr : t - 1 ≤ r) (hf : r ≤ fuel) :
+    IsGrouping t r (groupSizes t fuel r) := by
+  induction fuel generalizing r with
+  | zero => exact .last hr (by omega)
+  | succ fuel ih =>
+    by_cases h : r ≤ 2 * t - 1
+    · simp only [groupSizes, h, ↓reduceIte]
+      exact .last hr h
+    · simp only [groupSizes, h, ↓reduceIte]
+      by_cases h' : r < 3 * t - 1
+      · simp only [h', ↓reduceIte]
+        have := IsGrouping.cut (t := t) le_rfl (by omega) (ih (r := r - (t - 1) - 1)
+          (by omega) (by omega))
+        rwa [show t - 1 + 1 + (r - (t - 1) - 1) = r by omega] at this
+      · simp only [h', ↓reduceIte]
+        have := IsGrouping.cut (t := t) (by omega) le_rfl (ih (r := r - (2 * t - 1) - 1)
+          (by omega) (by omega))
+        rwa [show 2 * t - 1 + 1 + (r - (2 * t - 1) - 1) = r by omega] at this
+
+/-- At minimum degree at least `2`, a grouping has fewer sizes than triples: every group but the
+last takes at least two triples with the one after it, and the last at least one. -/
+theorem IsGrouping.length_lt {t r : ℕ} {ss : List ℕ} (ht : 2 ≤ t) (hg : IsGrouping t r ss) :
+    ss.length < r := by
+  induction hg with
+  | last hr _ => simp only [List.length_nil]; omega
+  | cut _ _ _ ih => simp only [List.length_cons]; omega
+
+/-! ### Shape -/
+
+/-- A node with `t - 1` to `2 * t - 1` keys over good children of height `h` is good, of height
+`h + 1`. -/
+theorem good_node {t h : ℕ} {first : BTree α β} {rest : List (α × β × BTree α β)}
+    (hf : Good t h first) (hr : ∀ e ∈ rest, Good t h e.2.2) (h₁ : t - 1 ≤ rest.length)
+    (h₂ : rest.length ≤ 2 * t - 1) : Good t (h + 1) (.node first rest) :=
+  have hn := node_of_good hf hr
+  ⟨hn.1, hn.2.1, .node h₁ h₂ hf.occupied fun e he => (hr e he).occupied⟩
+
+/-- A level of height `h`: its first tree and the children of its triples are good, of height
+`h`. -/
+structure GoodLevel (t h : ℕ) (first : BTree α β) (rest : List (α × β × BTree α β)) : Prop where
+  /-- The first tree is good. -/
+  good_first : Good t h first
+  /-- The child of every triple is good. -/
+  good_rest : ∀ e ∈ rest, Good t h e.2.2
+
+/-- Cutting a good level of height `h` by a grouping gives a good level of height `h + 1`, with
+one triple per size. -/
+theorem GoodLevel.pack {t h r : ℕ} {ss : List ℕ} (hg : IsGrouping t r ss) :
+    ∀ {first : BTree α β} {rest : List (α × β × BTree α β)}, GoodLevel t h first rest →
+      rest.length = r →
+      GoodLevel t (h + 1) (pack first rest ss).1 (pack first rest ss).2 ∧
+        (pack first rest ss).2.length = ss.length := by
+  induction hg with
+  | last h₁ h₂ =>
+    intro first rest hl hr
+    rw [pack_nil]
+    exact ⟨⟨good_node hl.good_first hl.good_rest (by omega) (by omega), by simp⟩, rfl⟩
+  | @cut s r ss h₁ h₂ _ ih =>
+    intro first rest hl hr
+    rcases hd : rest.drop s with _ | ⟨⟨k, v, c⟩, rest'⟩
+    · have := congrArg List.length hd
+      simp only [List.length_drop, List.length_nil] at this
+      omega
+    · rw [pack_cons_of_drop_eq_cons ss hd]
+      have hmem : ∀ e ∈ rest.drop s, e ∈ rest := fun e he => List.mem_of_mem_drop he
+      rw [hd] at hmem
+      have hlen := congrArg List.length hd
+      simp only [List.length_drop, List.length_cons] at hlen
+      obtain ⟨hl', hlen'⟩ := ih (first := c) (rest := rest')
+        ⟨hl.good_rest _ (hmem _ List.mem_cons_self),
+          fun e he => hl.good_rest e (hmem e (List.mem_cons_of_mem _ he))⟩ (by omega)
+      refine ⟨⟨good_node hl.good_first (fun e he => hl.good_rest e (List.mem_of_mem_take he))
+        (by simp; omega) (by simp; omega), ?_⟩, by simp [hlen']⟩
+      rintro e (_ | ⟨_, he⟩)
+      exacts [hl'.good_first, hl'.good_rest e he]
+
+variable [LinearOrder α]
+
+/-- A good tree with sorted entries is well-formed at a minimum degree of at least `2`: the
+occupancy of a non-root node implies that of a root. -/
+theorem Good.isWF {t h : ℕ} {tr : BTree α β} (ht : 2 ≤ t) (hg : Good t h tr)
+    (hs : tr.toList.IsSortedAssoc) : IsWF t tr where
+  two_le := ht
+  rootKeys_le := hg.occupied.rootKeys_le
+  rootKeys_pos hne := by have := hg.occupied.le_rootKeys hne; omega
+  occupied_of_mem_children _ hc := hg.occupied.of_mem_children hc
+  balanced := hg.balanced
+  sorted := hs
+
+/-- The rounds of bulk loading build a well-formed tree from a good level with sorted entries,
+given fuel at least its number of triples. -/
+theorem isWF_build {t h fuel : ℕ} {first : BTree α β} {rest : List (α × β × BTree α β)}
+    (ht : 2 ≤ t) (hl : GoodLevel t h first rest) (hfuel : rest.length ≤ fuel)
+    (hs : (first.toList ++ toListRest rest).IsSortedAssoc) :
+    IsWF t (build t fuel first rest) := by
+  induction fuel generalizing h first rest with
+  | zero =>
+    rcases rest with _ | ⟨e, es⟩
+    · simpa using hl.good_first.isWF ht (by simpa using hs)
+    · simp at hfuel
+  | succ fuel ih =>
+    rcases Nat.lt_or_ge (2 * t - 1) rest.length with hlt | hle
+    · rw [build_succ_of_lt hlt]
+      obtain ⟨hl', hlen⟩ :=
+        hl.pack (isGrouping_groupSizes (t := t) (fuel := rest.length) (by omega) le_rfl) rfl
+      have hg := isGrouping_groupSizes (t := t) (fuel := rest.length) (r := rest.length)
+        (by omega) le_rfl
+      exact ih hl' (by have := hg.length_lt ht; omega) (by rwa [toList_pack])
+    · rcases rest with _ | ⟨e, es⟩
+      · simpa using hl.good_first.isWF ht (by simpa using hs)
+      · rw [build_of_length_le (List.cons_ne_nil e es) hle]
+        have hn := node_of_good hl.good_first hl.good_rest
+        exact ⟨ht, hle, fun _ => by simp, hn.2.2, hn.1, hs⟩
+
+/-- Bulk loading a sorted list builds a well-formed tree at a minimum degree of at least `2`. -/
+theorem isWF_ofSortedList {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
+    IsWF t (ofSortedList t l) := by
+  rw [ofSortedList_eq_build, Nat.max_eq_left ht]
+  refine isWF_build ht ⟨⟨.leaf, rfl, .leaf⟩, fun e he => ?_⟩ (by simp)
+    (by rwa [toList_leaf, List.nil_append, toListRest_map_leaf])
+  obtain ⟨p, -, rfl⟩ := List.mem_map.1 he
+  exact ⟨.leaf, rfl, .leaf⟩
+
+/-- A bulk-loaded tree meets the height bound of well-formed trees. -/
+theorem height_ofSortedList_le {t : ℕ} {l : List (α × β)} (ht : 2 ≤ t) (h : l.IsSortedAssoc) :
+    (ofSortedList t l).height ≤ Nat.log t ((l.length + 1) / 2) + 1 := by
+  simpa using (isWF_ofSortedList ht h).height_le_log
+
+/-- Lookup in a bulk-loaded sorted list is lookup in the list. -/
+@[simp] theorem lookup_ofSortedList {t : ℕ} {l : List (α × β)} (h : l.IsSortedAssoc) (k : α) :
+    lookup k (ofSortedList t l) = l.lookup k := by
+  rw [lookup_eq_of_isSortedAssoc (by simpa using h), toList_ofSortedList]
 
 end Pure
 
@@ -314,5 +467,19 @@ example : ofSortedList 0 ((List.range' 1 7).map (·, ())) =
 /-- An unsorted list keeps its order. -/
 example : (ofSortedList 2 [(3, ()), (1, ()), (2, ()), (5, ()), (4, ())]).toList =
     [(3, ()), (1, ()), (2, ()), (5, ()), (4, ())] := by decide
+
+/-- The empty tree is well-formed. -/
+example : isWF 2 (ofSortedList 2 ([] : List (ℕ × Unit))) = true := by decide
+
+/-- Four entries at `t = 2`: a well-formed tree of two levels. -/
+example : isWF 2 (ofSortedList 2 [(1, ()), (2, ()), (3, ()), (4, ())]) = true := by decide
+
+/-- Twenty entries at `t = 2`: three levels, well-formed. -/
+example : isWF 2 (ofSortedList 2 ((List.range' 1 20).map (·, ()))) = true := by decide
+
+example : (ofSortedList 2 ((List.range' 1 20).map (·, ()))).height = 3 := by decide
+
+/-- Twenty entries at `t = 3`: well-formed. -/
+example : isWF 3 (ofSortedList 3 ((List.range' 1 20).map (·, ()))) = true := by decide
 
 end EpsilonEridani.BTree
