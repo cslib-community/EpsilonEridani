@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
+public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Predecessor and successor in classic B-trees
@@ -30,6 +31,9 @@ interface for evaluation and later monadic instantiations.
 `pred?_eq_of_isSortedAssoc` and `succ?_eq_of_isSortedAssoc` identify the queries with
 `SortedAssoc.pred?` and `SortedAssoc.succ?` on `toList`. Only sortedness is needed; `pred?_eq`
 and `succ?_eq` specialize these model equations to well-formed trees at any minimum degree.
+
+`Cslib.IsMonadHom.map_predM` and `map_succM` push a monad morphism through the polymorphic
+definitions, so that instantiations in other monads keep the pure value.
 -/
 
 public section
@@ -131,6 +135,39 @@ theorem succM_node_cons (le : α → α → m Bool) (visit : m Unit) (k k' : α)
   rw [succM]
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the predecessor search. -/
+theorem _root_.Cslib.IsMonadHom.map_predM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (predM le visit k tr) = predM (fun a b => f (le a b)) (f visit) k tr := by
+  match tr with
+  | .leaf => simp [predM_leaf, hf.map_pure]
+  | .node first [] => simp [predM_node_nil, hf.map_bind, hf.map_predM le visit k first]
+  | .node first ((k', v, c) :: rest) =>
+    simp [predM_node_cons, hf.map_bind, hf.map_pure, apply_ite f, hf.map_predM le visit k first,
+      hf.map_predM le visit k (.node c rest)]
+termination_by sizeOf tr
+
+/-- A monad morphism commutes with the successor search. -/
+theorem _root_.Cslib.IsMonadHom.map_succM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (succM le visit k tr) = succM (fun a b => f (le a b)) (f visit) k tr := by
+  match tr with
+  | .leaf => simp [succM_leaf, hf.map_pure]
+  | .node first [] => simp [succM_node_nil, hf.map_bind, hf.map_succM le visit k first]
+  | .node first ((k', v, c) :: rest) =>
+    simp [succM_node_cons, hf.map_bind, hf.map_pure, apply_ite f, hf.map_succM le visit k first,
+      hf.map_succM le visit k (.node c rest)]
+termination_by sizeOf tr
+
+end Transfer
 
 section Pure
 

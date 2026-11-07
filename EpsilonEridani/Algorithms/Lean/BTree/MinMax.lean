@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Basic
+public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Minimum and maximum in classic B-trees
@@ -25,6 +26,9 @@ minimum degree. The queries return `none` exactly when the tree has no entries, 
 malformed trees consisting of nodes with no keys.
 
 `maxM` and `max?` are characterized by their equation lemmas and the model equations.
+
+`Cslib.IsMonadHom.map_minM` and `map_maxM` push a monad morphism through the polymorphic
+definitions, so that instantiations in other monads keep the pure value.
 -/
 
 public section
@@ -112,6 +116,39 @@ theorem maxM_node_cons_cons (visit : m Unit) (first c : BTree α β) (k : α) (v
   rw [maxM]
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the minimum search. -/
+theorem _root_.Cslib.IsMonadHom.map_minM (hf : IsMonadHom m n f) (visit : m Unit)
+    (tr : BTree α β) : f (minM visit tr) = minM (f visit) tr := by
+  fun_induction minM visit tr with
+  | case1 => simp [minM, hf.map_pure]
+  | case2 first rest ih =>
+    simp only [minM, hf.map_bind, ih]
+    congr; funext; congr; funext o
+    cases o <;> simp [hf.map_pure]
+
+/-- A monad morphism commutes with the maximum search. -/
+theorem _root_.Cslib.IsMonadHom.map_maxM (hf : IsMonadHom m n f) (visit : m Unit)
+    (tr : BTree α β) : f (maxM visit tr) = maxM (f visit) tr := by
+  match tr with
+  | .leaf => simp [maxM_leaf, hf.map_pure]
+  | .node first [] => simp [maxM_node_nil, hf.map_bind, hf.map_maxM visit first]
+  | .node first [(k, v, c)] =>
+    simp only [maxM_node_singleton, hf.map_bind, hf.map_maxM visit c]
+    congr; funext; congr; funext o
+    cases o <;> simp [hf.map_pure]
+  | .node first ((k, v, c) :: e :: rest) =>
+    simp [maxM_node_cons_cons, hf.map_maxM visit (.node c (e :: rest))]
+termination_by sizeOf tr
+
+end Transfer
 
 section Pure
 
