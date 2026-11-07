@@ -7,7 +7,6 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
-public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Closed-interval queries in classic B-trees
