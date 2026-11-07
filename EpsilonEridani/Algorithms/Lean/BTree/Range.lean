@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
+public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Closed-interval queries in classic B-trees
@@ -96,6 +97,39 @@ theorem rangeRestM_cons (le : α → α → m Bool) (visit : m Unit) (lo hi k : 
   rw [rangeRestM]
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+mutual
+/-- A monad morphism commutes with closed-interval queries. -/
+theorem _root_.Cslib.IsMonadHom.map_rangeM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (lo hi : α) (tr : BTree α β) :
+    f (rangeM le visit lo hi tr) = rangeM (fun a b => f (le a b)) (f visit) lo hi tr := by
+  match tr with
+  | .leaf => simp [rangeM_leaf, hf.map_pure]
+  | .node first rest =>
+    simp [rangeM_node, hf.map_bind, hf.map_rangeRestM le visit lo hi first rest]
+termination_by sizeOf tr
+
+/-- A monad morphism commutes with the scan of a node's triples in a closed-interval query. -/
+theorem _root_.Cslib.IsMonadHom.map_rangeRestM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (lo hi : α) (first : BTree α β) (rest : List (α × β × BTree α β)) :
+    f (rangeRestM le visit lo hi first rest) =
+      rangeRestM (fun a b => f (le a b)) (f visit) lo hi first rest := by
+  match rest with
+  | [] => simp [rangeRestM_nil, hf.map_rangeM le visit lo hi first]
+  | (k, v, c) :: rest =>
+    simp [rangeRestM_cons, hf.map_bind, hf.map_pure, apply_ite f,
+      hf.map_rangeM le visit lo hi first, hf.map_rangeRestM le visit lo hi c rest]
+termination_by sizeOf first + sizeOf rest
+end
+
+end Transfer
 
 section Pure
 
