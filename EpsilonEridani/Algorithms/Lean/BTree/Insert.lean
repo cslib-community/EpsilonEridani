@@ -32,7 +32,9 @@ on entering each node of the search path, and never at the empty leaf. The pure 
 
 The definitions are structurally recursive and `@[expose]`d, so `decide` evaluates insertion on
 concrete trees from other modules; the monadic constructor equations `insertOrSplitM_leaf`,
-`insertOrSplitM_node`, `insertRestM_nil` and `insertRestM_cons` hold by `rfl`.
+`insertOrSplitM_node`, `insertRestM_nil` and `insertRestM_cons` hold by `rfl`. The transfer
+lemmas `Cslib.IsMonadHom.map_insertOrSplitM`, `map_insertRestM` and `map_insertM` push a monad
+morphism through the definitions.
 
 `toList_insert_of_isSortedAssoc` is the model equation: on a tree with sorted entries, `toList`
 of the insertion is `SortedAssoc.insert` on `toList`. `Good` names a balanced, occupied
@@ -348,6 +350,52 @@ theorem insertM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (k : 
     insertM t le visit k v tr = (do return (← insertOrSplitM t le visit k v tr).toTree) := rfl
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+mutual
+/-- A monad morphism commutes with the bottom-up insertion into a subtree. -/
+theorem _root_.Cslib.IsMonadHom.map_insertOrSplitM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (v : β) (tr : BTree α β) :
+    f (insertOrSplitM t le visit k v tr) =
+      insertOrSplitM t (fun a b => f (le a b)) (f visit) k v tr := by
+  match tr with
+  | .leaf => simp [hf.map_pure]
+  | .node first rest =>
+    simp only [insertOrSplitM_node, hf.map_bind, hf.map_insertRestM t le visit k v rest]
+    refine bind_congr fun _ => bind_congr fun o => ?_
+    cases o <;> simp [hf.map_bind, hf.map_pure, hf.map_insertOrSplitM t le visit k v first]
+termination_by sizeOf tr
+
+/-- A monad morphism commutes with the insertion among the triples of a node. -/
+theorem _root_.Cslib.IsMonadHom.map_insertRestM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (v : β) (rest : List (α × β × BTree α β)) :
+    f (insertRestM t le visit k v rest) =
+      insertRestM t (fun a b => f (le a b)) (f visit) k v rest := by
+  match rest with
+  | [] => simp [hf.map_pure]
+  | (k', v', c) :: rest =>
+    simp only [insertRestM_cons, hf.map_bind, apply_ite f, hf.map_pure,
+      hf.map_insertRestM t le visit k v rest]
+    refine bind_congr fun b => ?_
+    cases b <;> simp only [Bool.false_eq_true, ↓reduceIte]
+    refine bind_congr fun o => ?_
+    cases o <;> simp [hf.map_bind, hf.map_pure, hf.map_insertOrSplitM t le visit k v c]
+termination_by sizeOf rest
+end
+
+/-- A monad morphism commutes with insertion. -/
+theorem _root_.Cslib.IsMonadHom.map_insertM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (v : β) (tr : BTree α β) :
+    f (insertM t le visit k v tr) = insertM t (fun a b => f (le a b)) (f visit) k v tr := by
+  simp [insertM, hf.map_bind, hf.map_pure, hf.map_insertOrSplitM]
+
+end Transfer
 
 section Pure
 
