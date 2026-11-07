@@ -108,10 +108,7 @@ private theorem time_rangeT_add_rootKeys_le {lo hi : α} {tr : BTree α β} (ht 
     omega
   | .node first ((k, v, c) :: rest) =>
     obtain ⟨hsf, hsn, -, -⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
-    have hfirst : Occupied t first := hc first (by simp)
-    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
-    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
-      fun c' h => hc c' (children_node_subset_children_node_cons h)
+    obtain ⟨hfirst, hcf, hcn⟩ := occupied_children_node_cons hc
     have hk := hin (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
     have ih₁ := time_rangeT_add_rootKeys_le ht hcf hsf
       (fun p hp => hin p (mem_toList_node_cons.2 (Or.inl hp)))
@@ -154,14 +151,10 @@ private theorem time_rangeT_le_of_forall_lo_le {lo hi : α} {tr : BTree α β} (
     omega
   | .node first ((k, v, c) :: rest) =>
     obtain ⟨hsf, hsn, hlt, -⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
-    have hfirst : Occupied t first := hc first (by simp)
-    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
-    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
-      fun c' h => hc c' (children_node_subset_children_node_cons h)
+    obtain ⟨hfirst, hcf, hcn⟩ := occupied_children_node_cons hc
     have hk : lo ≤ k := hlo (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
-    have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
-    have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
-      (rest := rest)
+    obtain ⟨e₁, e₂⟩ := height_parts_le_height_node_cons (first := first) (k := k) (v := v)
+      (c := c) (rest := rest)
     rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hhi : k ≤ hi
     · have h₁ := time_rangeT_le_of_forall_mem ht hfirst hsf
@@ -194,14 +187,10 @@ private theorem time_rangeT_le_of_forall_le_hi {lo hi : α} {tr : BTree α β} (
     omega
   | .node first ((k, v, c) :: rest) =>
     obtain ⟨hsf, hsn, -, hgt⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
-    have hfirst : Occupied t first := hc first (by simp)
-    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
-    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
-      fun c' h => hc c' (children_node_subset_children_node_cons h)
+    obtain ⟨-, hcf, hcn⟩ := occupied_children_node_cons hc
     have hk : k ≤ hi := hhi (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
-    have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
-    have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
-      (rest := rest)
+    obtain ⟨e₁, e₂⟩ := height_parts_le_height_node_cons (first := first) (k := k) (v := v)
+      (c := c) (rest := rest)
     rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hlo : lo ≤ k
     · have h₁ := time_rangeT_le_of_forall_le_hi (lo := lo) ht hcf hsf
@@ -237,13 +226,9 @@ theorem time_rangeT_of_occupied {lo hi : α} {tr : BTree α β} (ht : 2 ≤ t)
     omega
   | .node first ((k, v, c) :: rest) =>
     obtain ⟨hsf, hsn, hlt, hgt⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
-    have hfirst : Occupied t first := hc first (by simp)
-    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
-    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
-      fun c' h => hc c' (children_node_subset_children_node_cons h)
-    have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
-    have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
-      (rest := rest)
+    obtain ⟨-, hcf, hcn⟩ := occupied_children_node_cons hc
+    obtain ⟨e₁, e₂⟩ := height_parts_le_height_node_cons (first := first) (k := k) (v := v)
+      (c := c) (rest := rest)
     rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi
     · have h₁ := time_rangeT_le_of_forall_le_hi (lo := lo) ht hcf hsf

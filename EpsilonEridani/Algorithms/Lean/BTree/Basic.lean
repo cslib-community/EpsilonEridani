@@ -464,6 +464,14 @@ theorem height_node_le_height_node_cons {first c : BTree α β} {k : α} {v : β
   simp only [height_node, heightRest_cons]
   omega
 
+/-- Splitting a node at its first separator: the first child is at least one level shorter than
+the node, and the node without its first child and separator is no taller. -/
+theorem height_parts_le_height_node_cons {first c : BTree α β} {k : α} {v : β}
+    {rest : List (α × β × BTree α β)} :
+    first.height + 1 ≤ (node first ((k, v, c) :: rest)).height ∧
+      (node c rest).height ≤ (node first ((k, v, c) :: rest)).height :=
+  ⟨height_first_succ_le, height_node_le_height_node_cons⟩
+
 /-- Every child of a tree is shorter than the tree. -/
 theorem height_succ_le_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
     c.height + 1 ≤ tr.height := by
@@ -628,6 +636,18 @@ theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c �
         exact (ih₂ e he').2 (h.of_mem_rest he')
       · obtain ⟨e, he', rfl⟩ := List.mem_map.1 he
         simpa using h.height_of_mem_rest he'
+
+/-- Splitting a node with occupied children at its first separator: the first child is occupied,
+and so are the children of the first child and of the node without its first child and
+separator. -/
+theorem occupied_children_node_cons {first c : BTree α β} {k : α} {v : β}
+    {rest : List (α × β × BTree α β)}
+    (hc : ∀ c' ∈ (node first ((k, v, c) :: rest)).children, Occupied t c') :
+    Occupied t first ∧ (∀ c' ∈ first.children, Occupied t c') ∧
+      ∀ c' ∈ (node c rest).children, Occupied t c' := by
+  have hfirst : Occupied t first := hc first (by simp)
+  exact ⟨hfirst, fun _ h => hfirst.of_mem_children h,
+    fun c' h => hc c' (children_node_subset_children_node_cons h)⟩
 
 end Inversion
 
