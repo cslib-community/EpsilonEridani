@@ -97,6 +97,39 @@ theorem rangeRestM_cons (le : α → α → m Bool) (visit : m Unit) (lo hi k : 
 
 end Polymorphic
 
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+mutual
+/-- A monad morphism commutes with closed-interval queries. -/
+theorem _root_.Cslib.IsMonadHom.map_rangeM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (lo hi : α) (tr : BTree α β) :
+    f (rangeM le visit lo hi tr) = rangeM (fun a b => f (le a b)) (f visit) lo hi tr := by
+  match tr with
+  | .leaf => simp [rangeM_leaf, hf.map_pure]
+  | .node first rest =>
+    simp [rangeM_node, hf.map_bind, hf.map_rangeRestM le visit lo hi first rest]
+termination_by sizeOf tr
+
+/-- A monad morphism commutes with the scan of a node's triples in a closed-interval query. -/
+theorem _root_.Cslib.IsMonadHom.map_rangeRestM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (lo hi : α) (first : BTree α β) (rest : List (α × β × BTree α β)) :
+    f (rangeRestM le visit lo hi first rest) =
+      rangeRestM (fun a b => f (le a b)) (f visit) lo hi first rest := by
+  match rest with
+  | [] => simp [rangeRestM_nil, hf.map_rangeM le visit lo hi first]
+  | (k, v, c) :: rest =>
+    simp [rangeRestM_cons, hf.map_bind, hf.map_pure, apply_ite f,
+      hf.map_rangeM le visit lo hi first, hf.map_rangeRestM le visit lo hi c rest]
+termination_by sizeOf first + sizeOf rest
+end
+
+end Transfer
+
 section Pure
 
 variable {α β : Type} [LinearOrder α] {t : ℕ} {tr : BTree α β}
@@ -128,6 +161,17 @@ scan above `hi`; include the separator itself exactly when it lies in the closed
          else []) := by
   by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi <;>
     simp [range, rangeM_node, rangeRestM_cons, leI, hlo, hhi]
+
+/-- The output length at the first separator: the preceding child's contribution when the
+separator is at least `lo`, and, when it is at most `hi`, the separator itself if it is at least
+`lo` and the contribution of the node without its first child and separator. -/
+theorem length_range_node_cons (lo hi k : α) (v : β) (first c : BTree α β)
+    (rest : List (α × β × BTree α β)) :
+    (range lo hi (.node first ((k, v, c) :: rest))).length =
+      (if lo ≤ k then (range lo hi first).length else 0) +
+        (if k ≤ hi then (range lo hi (.node c rest)).length + (if lo ≤ k then 1 else 0)
+         else 0) := by
+  by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi <;> simp [hlo, hhi]
 
 /-- Model equation: on a tree with sorted entries, the query returns the model's restriction
 of `toList` to the closed interval. -/

@@ -281,6 +281,20 @@ theorem mapRest_cons (f : β → γ) :
 /-- A node has one root key per triple. -/
 @[simp] theorem rootKeys_node : (node first rest).rootKeys = rest.length := rfl
 
+/-- The first separator splits a node's entries into those of its first child, the separator, and
+those of the node without its first child and separator. -/
+theorem mem_toList_node_cons {p : α × β} :
+    p ∈ (node first ((k, v, c) :: rest)).toList ↔
+      p ∈ first.toList ∨ p = (k, v) ∨ p ∈ (node c rest).toList := by
+  simp only [toList_node, toListRest_cons, List.cons_append, List.mem_append, List.mem_cons]
+
+/-- Dropping a node's first child and first separator keeps the remaining children. -/
+theorem children_node_subset_children_node_cons :
+    (node c rest).children ⊆ (node first ((k, v, c) :: rest)).children := by
+  intro c' h
+  simp only [children_node, List.map_cons, List.mem_cons] at h ⊢
+  tauto
+
 end Equations
 
 variable {tr : BTree α β}
@@ -615,6 +629,18 @@ theorem Occupied.of_mem_children {c : BTree α β} (h : Occupied t tr) (hc : c �
       · obtain ⟨e, he', rfl⟩ := List.mem_map.1 he
         simpa using h.height_of_mem_rest he'
 
+/-- Splitting a node with occupied children at its first separator: the first child is occupied,
+and so are the children of the first child and of the node without its first child and
+separator. -/
+theorem occupied_children_node_cons {first c : BTree α β} {k : α} {v : β}
+    {rest : List (α × β × BTree α β)}
+    (hc : ∀ c' ∈ (node first ((k, v, c) :: rest)).children, Occupied t c') :
+    Occupied t first ∧ (∀ c' ∈ first.children, Occupied t c') ∧
+      ∀ c' ∈ (node c rest).children, Occupied t c' := by
+  have hfirst : Occupied t first := hc first (by simp)
+  exact ⟨hfirst, fun _ h => hfirst.of_mem_children h,
+    fun c' h => hc c' (children_node_subset_children_node_cons h)⟩
+
 end Inversion
 
 section LinearOrder
@@ -668,6 +694,16 @@ theorem IsWF.of_mem_children (h : IsWF t tr) (hc : c ∈ tr.children) : IsWF t c
     refine ⟨h₁, by simpa using h₂, fun hne => by simpa using h₃ (by simpa using hne), ?_,
       by simpa using h₅, hs.2 h₆⟩
     simpa using h₄
+
+/-- A node's entries are sorted exactly when those of its first child and of the node without its
+first child and separator are, with the first separator strictly between them. -/
+theorem isSortedAssoc_toList_node_cons_iff {first : BTree α β} {k : α} {v : β}
+    {rest : List (α × β × BTree α β)} :
+    (node first ((k, v, c) :: rest)).toList.IsSortedAssoc ↔
+      first.toList.IsSortedAssoc ∧ (node c rest).toList.IsSortedAssoc ∧
+        (∀ p ∈ first.toList, p.1 < k) ∧ ∀ p ∈ (node c rest).toList, k < p.1 := by
+  rw [toList_node, toListRest_cons, List.cons_append, List.isSortedAssoc_append_cons_iff,
+    toList_node]
 
 end LinearOrder
 
