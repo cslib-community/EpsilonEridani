@@ -437,6 +437,19 @@ theorem height_succ_le_of_mem_rest {first : BTree α β} {rest : List (α × β 
   rw [height_node]
   omega
 
+/-- The first child of a node is shorter than the node. -/
+theorem height_first_succ_le {first : BTree α β} {rest : List (α × β × BTree α β)} :
+    first.height + 1 ≤ (node first rest).height := by
+  rw [height_node]
+  omega
+
+/-- Dropping a node's first child and first key leaves a tree no taller than the node. -/
+theorem height_node_le_height_node_cons {first c : BTree α β} {k : α} {v : β}
+    {rest : List (α × β × BTree α β)} :
+    (node c rest).height ≤ (node first ((k, v, c) :: rest)).height := by
+  simp only [height_node, heightRest_cons]
+  omega
+
 /-- Every child of a tree is shorter than the tree. -/
 theorem height_succ_le_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
     c.height + 1 ≤ tr.height := by

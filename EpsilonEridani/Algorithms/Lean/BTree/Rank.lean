@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Lookup
+public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Rank queries in classic B-trees
@@ -20,6 +21,9 @@ a key equal to the query is not counted. The pure `Id` instantiation is `rank`.
 the entries are sorted. `rank_eq` specializes it to well-formed trees of any minimum degree.
 The constructor equations support evaluation and monadic instantiations without unfolding
 the well-founded recursion.
+
+`Cslib.IsMonadHom.map_rankM` pushes a monad morphism through `rankM`, so that instantiations
+in other monads keep the pure value.
 -/
 
 public section
@@ -78,6 +82,27 @@ theorem rankM_node_cons (le : α → α → m Bool) (visit : m Unit) (k k' : α)
   rw [rankM]
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the rank search. -/
+theorem _root_.Cslib.IsMonadHom.map_rankM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (rankM le visit k tr) = rankM (fun a b => f (le a b)) (f visit) k tr := by
+  match tr with
+  | .leaf => simp [rankM_leaf, hf.map_pure]
+  | .node first [] => simp [rankM_node_nil, hf.map_bind, hf.map_rankM le visit k first]
+  | .node first ((k', v, c) :: rest) =>
+    simp [rankM_node_cons, hf.map_bind, hf.map_pure, apply_ite f, hf.map_rankM le visit k first,
+      hf.map_rankM le visit k (.node c rest)]
+termination_by sizeOf tr
+
+end Transfer
 
 section Pure
 

@@ -7,6 +7,7 @@ Authors: Jesse Alama
 module
 
 public import EpsilonEridani.Algorithms.Lean.BTree.Basic
+public import Cslib.Foundations.Control.Monad.IsMonadHom
 
 /-!
 # Search in classic B-trees
@@ -29,6 +30,9 @@ specialize it to well-formed trees. Costs are not stated here.
 `lookupM` recurses on `.node c rest`, which is not a structural subterm, so it is defined by
 well-founded recursion on `sizeOf`; `decide` and `rfl` cannot evaluate `lookup`, and the examples
 use the equation lemmas `lookup_node_nil` and `lookup_node_cons` through `simp`.
+
+`Cslib.IsMonadHom.map_slotM`, `map_lookupM` and `map_containsM` push a monad morphism through
+the polymorphic definitions, so that instantiations in other monads keep the pure value.
 -/
 
 public section
@@ -75,6 +79,38 @@ termination_by tr => sizeOf tr
   return (← lookupM le visit k tr).isSome
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the within-node search. -/
+theorem _root_.Cslib.IsMonadHom.map_slotM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (k : α) (rest : List (α × β × BTree α β)) :
+    f (slotM le k rest) = slotM (fun a b => f (le a b)) k rest := by
+  induction rest with
+  | nil => simp [slotM, hf.map_pure]
+  | cons e rest ih =>
+    obtain ⟨k', v, c⟩ := e
+    simp [slotM, hf.map_bind, hf.map_pure, apply_ite f, ih]
+
+/-- A monad morphism commutes with lookup. -/
+theorem _root_.Cslib.IsMonadHom.map_lookupM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (lookupM le visit k tr) = lookupM (fun a b => f (le a b)) (f visit) k tr := by
+  fun_induction lookupM le visit k tr <;>
+    simp [lookupM, hf.map_bind, hf.map_pure, apply_ite f, *]
+
+/-- A monad morphism commutes with the membership test. -/
+theorem _root_.Cslib.IsMonadHom.map_containsM (hf : IsMonadHom m n f) (le : α → α → m Bool)
+    (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (containsM le visit k tr) = containsM (fun a b => f (le a b)) (f visit) k tr := by
+  simp [containsM, hf.map_bind, hf.map_pure, hf.map_lookupM]
+
+end Transfer
 
 section Pure
 
