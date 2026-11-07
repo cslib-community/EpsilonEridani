@@ -163,6 +163,17 @@ scan above `hi`; include the separator itself exactly when it lies in the closed
   by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi <;>
     simp [range, rangeM_node, rangeRestM_cons, leI, hlo, hhi]
 
+/-- The output length at the first separator: the preceding child's contribution when the
+separator is at least `lo`, and, when it is at most `hi`, the separator itself if it is at least
+`lo` and the contribution of the node without its first child and separator. -/
+theorem length_range_node_cons (lo hi k : α) (v : β) (first c : BTree α β)
+    (rest : List (α × β × BTree α β)) :
+    (range lo hi (.node first ((k, v, c) :: rest))).length =
+      (if lo ≤ k then (range lo hi first).length else 0) +
+        (if k ≤ hi then (range lo hi (.node c rest)).length + (if lo ≤ k then 1 else 0)
+         else 0) := by
+  by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi <;> simp [hlo, hhi]
+
 /-- Model equation: on a tree with sorted entries, the query returns the model's restriction
 of `toList` to the closed interval. -/
 theorem range_eq_of_isSortedAssoc (h : tr.toList.IsSortedAssoc) (lo hi : α) :

@@ -16,8 +16,9 @@ public import EpsilonEridani.Algorithms.Lean.BTree.Range
 so the time of a run is the number of nodes it visits. `ret_rangeT` identifies its value with
 `range`, through the transfer lemma `Cslib.IsMonadHom.map_rangeM`.
 
-`time_rangeT` bounds the visits on a well-formed tree by `2 * height + k`, where `k` is the length
-of the output. A visited node either returns one of its own keys or has every key outside the
+`time_rangeT_of_occupied` bounds the visits by `2 * height + k`, where `k` is the length of the
+output, on any tree with sorted entries and occupied children; `time_rangeT` states it for
+well-formed trees. A visited node either returns one of its own keys or has every key outside the
 interval; in the second case the keys that can lie below it straddle `lo` or `hi`, and at each
 depth at most one node straddles each bound. The proof makes this precise with three auxiliary
 bounds, by recursion on the tree:
@@ -61,7 +62,7 @@ theorem rangeT_def (lo hi : α) : rangeT lo hi tr = rangeM leT (tick 1) lo hi tr
   simp [rangeT, rangeM_leaf]
 
 /-- A node without keys is visited once before its only child. -/
-theorem time_rangeT_node_nil (lo hi : α) (first : BTree α β) :
+@[simp] theorem time_rangeT_node_nil (lo hi : α) (first : BTree α β) :
     (rangeT lo hi (.node first [])).time = (rangeT lo hi first).time + 1 := by
   simp [rangeT, rangeM_node, rangeRestM_nil]
   omega
@@ -69,7 +70,7 @@ theorem time_rangeT_node_nil (lo hi : α) (first : BTree α β) :
 /-- At the first separator, the child before it is entered when the separator is at least `lo`,
 and the remaining triples are scanned, as the node without its first child and separator, when
 the separator is at most `hi`. That node accounts for the single visit of the original node. -/
-theorem time_rangeT_node_cons (lo hi k : α) (v : β) (first c : BTree α β)
+@[simp] theorem time_rangeT_node_cons (lo hi k : α) (v : β) (first c : BTree α β)
     (rest : List (α × β × BTree α β)) :
     (rangeT lo hi (.node first ((k, v, c) :: rest))).time =
       (if lo ≤ k then (rangeT lo hi first).time else 0) +
@@ -80,40 +81,6 @@ theorem time_rangeT_node_cons (lo hi k : α) (v : β) (first c : BTree α β)
 /-! ### Auxiliary bounds -/
 
 variable {lo hi : α}
-
-private theorem length_range_node_cons (k : α) (v : β) (first c : BTree α β)
-    (rest : List (α × β × BTree α β)) :
-    (range lo hi (.node first ((k, v, c) :: rest))).length =
-      (if lo ≤ k then (range lo hi first).length else 0) +
-        (if k ≤ hi then (range lo hi (.node c rest)).length + (if lo ≤ k then 1 else 0)
-         else 0) := by
-  by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi <;> simp [hlo, hhi]
-
-/-- Facts about the two parts into which the first separator splits a node. -/
-private theorem node_cons_parts {k : α} {v : β} {first c : BTree α β}
-    {rest : List (α × β × BTree α β)}
-    (hc : ∀ c' ∈ (node first ((k, v, c) :: rest)).children, Occupied t c')
-    (hs : (node first ((k, v, c) :: rest)).toList.IsSortedAssoc) :
-    Occupied t first ∧ (∀ c' ∈ first.children, Occupied t c') ∧
-      (∀ c' ∈ (node c rest).children, Occupied t c') ∧
-      first.toList.IsSortedAssoc ∧ (node c rest).toList.IsSortedAssoc ∧
-      (∀ p ∈ first.toList, p.1 < k) ∧ (∀ p ∈ (node c rest).toList, k < p.1) := by
-  have hfirst : Occupied t first := hc first (by simp)
-  rw [toList_node, toListRest_cons, List.cons_append] at hs
-  obtain ⟨h₁, h₂, hlt, hgt⟩ := List.isSortedAssoc_append_cons_iff.1 hs
-  refine ⟨hfirst, fun c' h' => hfirst.of_mem_children h', fun c' h' => hc c' ?_, h₁,
-    by simpa using h₂, hlt, by simpa using hgt⟩
-  simp only [children_node, List.map_cons, List.mem_cons] at h' ⊢
-  tauto
-
-omit [LinearOrder α] in
-/-- Every entry of the node is in its first child, is the first separator, or is in the node
-without its first child and separator. -/
-private theorem mem_toList_node_cons {k : α} {v : β} {first c : BTree α β}
-    {rest : List (α × β × BTree α β)} {p : α × β} :
-    p ∈ (node first ((k, v, c) :: rest)).toList ↔
-      p ∈ first.toList ∨ p = (k, v) ∨ p ∈ (node c rest).toList := by
-  simp only [toList_node, toListRest_cons, List.cons_append, List.mem_append, List.mem_cons]
 
 /-- A query whose interval contains every entry visits each node once and returns at least one
 entry per occupied node. The root's keys pay for its own visit and for the visit it causes in
@@ -140,7 +107,11 @@ private theorem time_rangeT_add_rootKeys_le {lo hi : α} {tr : BTree α β} (ht 
     simp [time_rangeT_node_nil, rootKeys]
     omega
   | .node first ((k, v, c) :: rest) =>
-    obtain ⟨hfirst, hcf, hcn, hsf, hsn, -, -⟩ := node_cons_parts hc hs
+    obtain ⟨hsf, hsn, -, -⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
+    have hfirst : Occupied t first := hc first (by simp)
+    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
+    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
+      fun c' h => hc c' (children_node_subset_children_node_cons h)
     have hk := hin (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
     have ih₁ := time_rangeT_add_rootKeys_le ht hcf hsf
       (fun p hp => hin p (mem_toList_node_cons.2 (Or.inl hp)))
@@ -148,14 +119,14 @@ private theorem time_rangeT_add_rootKeys_le {lo hi : α} {tr : BTree α β} (ht 
       (fun p hp => hin p (mem_toList_node_cons.2 (Or.inr (Or.inr hp))))
     have := occ hfirst ih₁
     simp only [rootKeys, List.length_cons] at ih₂ ⊢
-    rw [time_rangeT_node_cons, length_range_node_cons]
+    rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     simp only [hk.1, hk.2, ↓reduceIte]
     omega
 termination_by sizeOf tr
 
 /-- An occupied tree whose entries all lie in the interval is visited at most once per entry
 returned. -/
-private theorem time_rangeT_le_of_occupied (ht : 2 ≤ t) (ho : Occupied t tr)
+private theorem time_rangeT_le_of_forall_mem (ht : 2 ≤ t) (ho : Occupied t tr)
     (hs : tr.toList.IsSortedAssoc) (hin : ∀ p ∈ tr.toList, lo ≤ p.1 ∧ p.1 ≤ hi) :
     (rangeT lo hi tr).time ≤ (range lo hi tr).length := by
   have h := time_rangeT_add_rootKeys_le ht (fun c hc => ho.of_mem_children hc) hs hin
@@ -182,14 +153,18 @@ private theorem time_rangeT_le_of_forall_lo_le {lo hi : α} {tr : BTree α β} (
     rw [time_rangeT_node_nil, range_node_nil]
     omega
   | .node first ((k, v, c) :: rest) =>
-    obtain ⟨hfirst, hcf, hcn, hsf, hsn, hlt, -⟩ := node_cons_parts hc hs
+    obtain ⟨hsf, hsn, hlt, -⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
+    have hfirst : Occupied t first := hc first (by simp)
+    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
+    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
+      fun c' h => hc c' (children_node_subset_children_node_cons h)
     have hk : lo ≤ k := hlo (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
     have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
     have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
       (rest := rest)
-    rw [time_rangeT_node_cons, length_range_node_cons]
+    rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hhi : k ≤ hi
-    · have h₁ := time_rangeT_le_of_occupied ht hfirst hsf
+    · have h₁ := time_rangeT_le_of_forall_mem ht hfirst hsf
         (fun p hp => ⟨hlo p (mem_toList_node_cons.2 (Or.inl hp)), ((hlt p hp).trans_le hhi).le⟩)
       have h₂ := time_rangeT_le_of_forall_lo_le (hi := hi) ht hcn hsn
         (fun p hp => hlo p (mem_toList_node_cons.2 (Or.inr (Or.inr hp))))
@@ -218,12 +193,16 @@ private theorem time_rangeT_le_of_forall_le_hi {lo hi : α} {tr : BTree α β} (
     rw [time_rangeT_node_nil, range_node_nil]
     omega
   | .node first ((k, v, c) :: rest) =>
-    obtain ⟨-, hcf, hcn, hsf, hsn, -, hgt⟩ := node_cons_parts hc hs
+    obtain ⟨hsf, hsn, -, hgt⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
+    have hfirst : Occupied t first := hc first (by simp)
+    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
+    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
+      fun c' h => hc c' (children_node_subset_children_node_cons h)
     have hk : k ≤ hi := hhi (k, v) (mem_toList_node_cons.2 (Or.inr (Or.inl rfl)))
     have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
     have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
       (rest := rest)
-    rw [time_rangeT_node_cons, length_range_node_cons]
+    rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hlo : lo ≤ k
     · have h₁ := time_rangeT_le_of_forall_le_hi (lo := lo) ht hcf hsf
         (fun p hp => hhi p (mem_toList_node_cons.2 (Or.inl hp)))
@@ -238,26 +217,34 @@ private theorem time_rangeT_le_of_forall_le_hi {lo hi : α} {tr : BTree α β} (
       omega
 termination_by sizeOf tr
 
-/-- The general bound: below the node where `lo` and `hi` part ways, each of the two boundary
-paths pays at most one unproductive visit per level. -/
-private theorem time_rangeT_le_of_sorted {lo hi : α} {tr : BTree α β} (ht : 2 ≤ t)
+/-! ### Node-visit bounds -/
+
+/-- A closed-interval query visits at most `2 * height + k` nodes, where `k` is the number of
+entries it returns, on any tree with sorted entries whose children are occupied for some `t ≥ 2`.
+Below the node where `lo` and `hi` part ways, each of the two boundary paths pays at most one
+unproductive visit per level. Neither balance nor the root's key count is needed. -/
+theorem time_rangeT_of_occupied {lo hi : α} {tr : BTree α β} (ht : 2 ≤ t)
     (hc : ∀ c ∈ tr.children, Occupied t c) (hs : tr.toList.IsSortedAssoc) :
     (rangeT lo hi tr).time ≤ 2 * tr.height + (range lo hi tr).length := by
   match tr with
   | .leaf => simp
   | .node first [] =>
     have hfirst : Occupied t first := hc first (by simp)
-    have ih := time_rangeT_le_of_sorted (lo := lo) (hi := hi) ht
+    have ih := time_rangeT_of_occupied (lo := lo) (hi := hi) ht
       (fun c h => hfirst.of_mem_children h) (by simpa using hs)
     have e := height_first_succ_le (first := first) (rest := [])
     rw [time_rangeT_node_nil, range_node_nil]
     omega
   | .node first ((k, v, c) :: rest) =>
-    obtain ⟨-, hcf, hcn, hsf, hsn, hlt, hgt⟩ := node_cons_parts hc hs
+    obtain ⟨hsf, hsn, hlt, hgt⟩ := isSortedAssoc_toList_node_cons_iff.1 hs
+    have hfirst : Occupied t first := hc first (by simp)
+    have hcf : ∀ c' ∈ first.children, Occupied t c' := fun _ h => hfirst.of_mem_children h
+    have hcn : ∀ c' ∈ (node c rest).children, Occupied t c' :=
+      fun c' h => hc c' (children_node_subset_children_node_cons h)
     have e₁ := height_first_succ_le (first := first) (rest := (k, v, c) :: rest)
     have e₂ := height_node_le_height_node_cons (first := first) (k := k) (v := v) (c := c)
       (rest := rest)
-    rw [time_rangeT_node_cons, length_range_node_cons]
+    rw [time_rangeT_node_cons, length_range_node_cons lo hi]
     by_cases hlo : lo ≤ k <;> by_cases hhi : k ≤ hi
     · have h₁ := time_rangeT_le_of_forall_le_hi (lo := lo) ht hcf hsf
         (fun p hp => ((hlt p hp).trans_le hhi).le)
@@ -265,23 +252,21 @@ private theorem time_rangeT_le_of_sorted {lo hi : α} {tr : BTree α β} (ht : 2
         (fun p hp => (hlo.trans_lt (hgt p hp)).le)
       simp only [hlo, hhi, ↓reduceIte]
       omega
-    · have h₁ := time_rangeT_le_of_sorted (lo := lo) (hi := hi) ht hcf hsf
+    · have h₁ := time_rangeT_of_occupied (lo := lo) (hi := hi) ht hcf hsf
       simp only [hlo, hhi, ↓reduceIte]
       omega
-    · have h₂ := time_rangeT_le_of_sorted (lo := lo) (hi := hi) ht hcn hsn
+    · have h₂ := time_rangeT_of_occupied (lo := lo) (hi := hi) ht hcn hsn
       simp only [hlo, hhi, ↓reduceIte]
       omega
     · simp only [hlo, hhi, ↓reduceIte]
       omega
 termination_by sizeOf tr
 
-/-! ### Node-visit bounds -/
-
 /-- A closed-interval query on a well-formed tree visits at most `2 * height + k` nodes, where `k`
 is the number of entries it returns. -/
 theorem time_rangeT (h : IsWF t tr) (lo hi : α) :
     (rangeT lo hi tr).time ≤ 2 * tr.height + (range lo hi tr).length :=
-  time_rangeT_le_of_sorted h.two_le h.occupied_of_mem_children h.sorted
+  time_rangeT_of_occupied h.two_le h.occupied_of_mem_children h.sorted
 
 /-- A closed-interval query on a well-formed tree visits logarithmically many nodes beyond one per
 entry it returns. -/
