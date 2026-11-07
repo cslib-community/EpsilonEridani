@@ -22,12 +22,13 @@ Bottom-up erasure visits, at each level, the node on its search path (below the 
 path of `popMinM` to the successor) and, when the child it returns from underflows, the one
 sibling the repair merges it with; the root has no sibling. A repair costs at most one visit
 (`time_rebalanceRightM_le`, `time_rebalanceLastM_le`). `time_popMinM_le` bounds the removal of
-the least entry of a subtree by `2 * height - 1`, because the deepest node on its path has only
-leaves below it and so is never repaired. `time_eraseSubtreeM_le` bounds erasure from a subtree by
-`2 * height`, and `time_eraseRestM_le` the scan of a node's triples, given a bound on the erasure
-of the child before them. On every tree, well-formed or not, `time_eraseT` states `2 * height`,
-and `time_eraseMinT` and `time_eraseMaxT` state `3 * height`: a pass to the extreme entry, then
-erasure of its key. The `_le_log` corollaries compose these with `IsWF.height_le_log`.
+the least entry of a subtree by `2 * height - 1`, because the deepest node on its path has a leaf
+as its first child, so `popMinM` returns from it without a repair. `time_eraseSubtreeM_le` bounds
+erasure from a subtree by `2 * height`, and `time_eraseRestM_le` the scan of a node's triples,
+given a bound on the erasure of the child before them. On every tree, well-formed or not,
+`time_eraseT` states `2 * height`, and `time_eraseMinT` and `time_eraseMaxT` state `3 * height`: a
+pass to the extreme entry, then erasure of its key. The `_le_log` corollaries compose these with
+`IsWF.height_le_log`.
 -/
 
 public section
@@ -55,7 +56,8 @@ theorem time_rebalanceLastM_le (prev : BTree α β) (k : α) (v : β) (c : BTree
   split <;> simp
 
 /-- Removing the least entry of a subtree visits at most `2 * height - 1` nodes: one node and at
-most one repaired sibling per level, with no repair at the deepest node. -/
+most one repaired sibling per level, with no repair at the deepest node, whose first child is a
+leaf. -/
 theorem time_popMinM_le (tr : BTree α β) : (popMinM t (tick 1) tr).time ≤ 2 * tr.height - 1 := by
   match tr with
   | .leaf => simp
