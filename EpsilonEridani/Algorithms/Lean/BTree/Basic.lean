@@ -464,14 +464,6 @@ theorem height_node_le_height_node_cons {first c : BTree α β} {k : α} {v : β
   simp only [height_node, heightRest_cons]
   omega
 
-/-- Splitting a node at its first separator: the first child is at least one level shorter than
-the node, and the node without its first child and separator is no taller. -/
-theorem height_parts_le_height_node_cons {first c : BTree α β} {k : α} {v : β}
-    {rest : List (α × β × BTree α β)} :
-    first.height + 1 ≤ (node first ((k, v, c) :: rest)).height ∧
-      (node c rest).height ≤ (node first ((k, v, c) :: rest)).height :=
-  ⟨height_first_succ_le, height_node_le_height_node_cons⟩
-
 /-- Every child of a tree is shorter than the tree. -/
 theorem height_succ_le_of_mem_children {c : BTree α β} (hc : c ∈ tr.children) :
     c.height + 1 ≤ tr.height := by
