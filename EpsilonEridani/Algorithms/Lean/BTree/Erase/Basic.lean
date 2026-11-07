@@ -39,6 +39,9 @@ and `visit := pure ()`. The extremal removals built on erasure are in
 `eraseRestM` takes the child before the triples together with the computation of its erasure,
 so that the definitions are structurally recursive and `@[expose]`d: `decide` evaluates erasure
 on concrete trees from other modules, and the monadic constructor equations hold by `rfl`.
+The transfer lemmas `Cslib.IsMonadHom.map_eraseM` and its siblings, down to
+`map_rebalanceRightM`, `map_rebalanceLastM` and `map_popMinM`, push a monad morphism through the
+definitions.
 
 `toList_erase_of_isSortedAssoc` is the model equation against `SortedAssoc.erase` on trees with
 sorted entries. `Good` (from `EpsilonEridani.BTree.Insert`), `Underfull` and `EraseFits` state
@@ -242,6 +245,85 @@ theorem popMinM_node (t : ℕ) (visit : m Unit) (first : BTree α β)
         pure (some (e, .node p.1 p.2))) := rfl
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the repair against the right sibling. -/
+theorem _root_.Cslib.IsMonadHom.map_rebalanceRightM (hf : IsMonadHom m n f) (t : ℕ)
+    (visit : m Unit) (c : BTree α β) (k : α) (v : β) (s : BTree α β)
+    (rest : List (α × β × BTree α β)) :
+    f (rebalanceRightM t visit c k v s rest) = rebalanceRightM t (f visit) c k v s rest := by
+  simp [rebalanceRightM_def, apply_ite f, hf.map_bind, hf.map_pure]
+
+/-- A monad morphism commutes with the repair against the left sibling. -/
+theorem _root_.Cslib.IsMonadHom.map_rebalanceLastM (hf : IsMonadHom m n f) (t : ℕ)
+    (visit : m Unit) (prev : BTree α β) (k : α) (v : β) (c : BTree α β) :
+    f (rebalanceLastM t visit prev k v c) = rebalanceLastM t (f visit) prev k v c := by
+  simp [rebalanceLastM_def, apply_ite f, hf.map_bind, hf.map_pure]
+
+/-- A monad morphism commutes with the removal of the least entry of a subtree. -/
+theorem _root_.Cslib.IsMonadHom.map_popMinM (hf : IsMonadHom m n f) (t : ℕ) (visit : m Unit)
+    (tr : BTree α β) : f (popMinM t visit tr) = popMinM t (f visit) tr := by
+  match tr with
+  | .leaf => simp [hf.map_pure]
+  | .node first rest =>
+    simp only [popMinM_node, hf.map_bind, hf.map_popMinM t visit first]
+    refine bind_congr fun _ => bind_congr fun o => ?_
+    rcases o with _ | ⟨e, first'⟩ <;> rcases rest with _ | ⟨⟨k, v, c⟩, rest'⟩ <;>
+      simp [hf.map_bind, hf.map_pure, hf.map_rebalanceRightM]
+termination_by sizeOf tr
+
+mutual
+/-- A monad morphism commutes with erasure from a subtree. -/
+theorem _root_.Cslib.IsMonadHom.map_eraseSubtreeM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (eraseSubtreeM t le visit k tr) = eraseSubtreeM t (fun a b => f (le a b)) (f visit) k tr := by
+  match tr with
+  | .leaf => simp [hf.map_pure]
+  | .node first rest =>
+    simp [eraseSubtreeM_node, hf.map_bind, hf.map_pure,
+      hf.map_eraseRestM t le visit k first _ rest, hf.map_eraseSubtreeM t le visit k first]
+termination_by sizeOf tr
+
+/-- A monad morphism commutes with erasure among the triples of a node. -/
+theorem _root_.Cslib.IsMonadHom.map_eraseRestM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (prev : BTree α β)
+    (prevErased : m (BTree α β)) (rest : List (α × β × BTree α β)) :
+    f (eraseRestM t le visit k prev prevErased rest) =
+      eraseRestM t (fun a b => f (le a b)) (f visit) k prev (f prevErased) rest := by
+  match rest with
+  | [] => simp [eraseRestM_nil, hf.map_bind, hf.map_pure]
+  | (k', v', c) :: rest =>
+    simp only [eraseRestM_cons, hf.map_bind]
+    refine bind_congr fun b => ?_
+    cases b
+    · rcases rest with _ | ⟨e, rest⟩
+      · simp [hf.map_bind, hf.map_rebalanceLastM, hf.map_eraseSubtreeM t le visit k c]
+      · simp [hf.map_bind, hf.map_pure, hf.map_eraseSubtreeM t le visit k c,
+          hf.map_eraseRestM t le visit k c _ (e :: rest)]
+    · simp only [↓reduceIte, hf.map_bind]
+      refine bind_congr fun b => ?_
+      cases b
+      · simp [hf.map_bind, hf.map_rebalanceRightM]
+      · simp only [↓reduceIte, hf.map_bind, hf.map_popMinM]
+        refine bind_congr fun o => ?_
+        rcases o with _ | ⟨⟨k₂, v₂⟩, c'⟩ <;> rcases rest with _ | ⟨⟨k₃, v₃, c₃⟩, rest₃⟩ <;>
+          simp [hf.map_bind, hf.map_pure, hf.map_rebalanceLastM, hf.map_rebalanceRightM]
+termination_by sizeOf rest
+end
+
+/-- A monad morphism commutes with erasure. -/
+theorem _root_.Cslib.IsMonadHom.map_eraseM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (k : α) (tr : BTree α β) :
+    f (eraseM t le visit k tr) = eraseM t (fun a b => f (le a b)) (f visit) k tr := by
+  simp [eraseM_def, hf.map_bind, hf.map_pure, hf.map_eraseSubtreeM]
+
+end Transfer
 
 section PureStructure
 
