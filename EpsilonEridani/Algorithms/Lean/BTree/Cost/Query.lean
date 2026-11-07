@@ -45,8 +45,14 @@ variable {α β : Type} {tr : BTree α β}
 /-- Least entry, charging one tick per node visited. -/
 def minT (tr : BTree α β) : TimeM ℕ (Option (α × β)) := minM (tick 1) tr
 
+/-- `minT` is `minM` with one tick per visit. -/
+theorem minT_def : minT tr = minM (tick 1) tr := (rfl)
+
 /-- Greatest entry, charging one tick per node visited. -/
 def maxT (tr : BTree α β) : TimeM ℕ (Option (α × β)) := maxM (tick 1) tr
+
+/-- `maxT` is `maxM` with one tick per visit. -/
+theorem maxT_def : maxT tr = maxM (tick 1) tr := (rfl)
 
 /-- The value of `minT` is `min?`. -/
 @[simp] theorem ret_minT : (minT tr).ret = min? tr := by
@@ -105,8 +111,14 @@ abbrev leT (a b : α) : TimeM ℕ Bool := pure (decide (a ≤ b))
 /-- Lookup charging one tick per node visited. -/
 def lookupT (k : α) (tr : BTree α β) : TimeM ℕ (Option β) := lookupM leT (tick 1) k tr
 
+/-- `lookupT` is `lookupM` with the free comparator and one tick per visit. -/
+theorem lookupT_def (k : α) : lookupT k tr = lookupM leT (tick 1) k tr := (rfl)
+
 /-- Membership test charging one tick per node visited. -/
 def containsT (k : α) (tr : BTree α β) : TimeM ℕ Bool := containsM leT (tick 1) k tr
+
+/-- `containsT` is `containsM` with the free comparator and one tick per visit. -/
+theorem containsT_def (k : α) : containsT k tr = containsM leT (tick 1) k tr := (rfl)
 
 /-- The membership test is the success of lookup, at the same cost. -/
 theorem containsT_eq (k : α) : containsT k tr = Option.isSome <$> lookupT k tr := by
@@ -115,11 +127,20 @@ theorem containsT_eq (k : α) : containsT k tr = Option.isSome <$> lookupT k tr 
 /-- Strict predecessor, charging one tick per node visited. -/
 def predT (k : α) (tr : BTree α β) : TimeM ℕ (Option (α × β)) := predM leT (tick 1) k tr
 
+/-- `predT` is `predM` with the free comparator and one tick per visit. -/
+theorem predT_def (k : α) : predT k tr = predM leT (tick 1) k tr := (rfl)
+
 /-- Strict successor, charging one tick per node visited. -/
 def succT (k : α) (tr : BTree α β) : TimeM ℕ (Option (α × β)) := succM leT (tick 1) k tr
 
+/-- `succT` is `succM` with the free comparator and one tick per visit. -/
+theorem succT_def (k : α) : succT k tr = succM leT (tick 1) k tr := (rfl)
+
 /-- Rank, charging one tick per node visited. -/
 def rankT (k : α) (tr : BTree α β) : TimeM ℕ ℕ := rankM leT (tick 1) k tr
+
+/-- `rankT` is `rankM` with the free comparator and one tick per visit. -/
+theorem rankT_def (k : α) : rankT k tr = rankM leT (tick 1) k tr := (rfl)
 
 /-- The value of `lookupT` is `lookup`. -/
 @[simp] theorem ret_lookupT (k : α) : (lookupT k tr).ret = lookup k tr := by
