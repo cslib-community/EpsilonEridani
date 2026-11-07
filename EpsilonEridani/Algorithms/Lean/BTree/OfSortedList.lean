@@ -34,6 +34,8 @@ is kept. The pure operations `pack`, `build` and `ofSortedList` are the `Id` ins
 `visit := pure ()`. All recursion is structural, on a fuel argument or on the list of sizes, so
 the definitions are `@[expose]`d and `decide` evaluates bulk loading on concrete inputs; when the
 fuel runs out, the remaining level becomes a single node, which keeps the entries.
+`Cslib.IsMonadHom.map_packM`, `map_buildM` and `map_ofSortedListM` push a monad morphism through
+them.
 
 `toList_ofSortedList` states that bulk loading keeps the entries in order, for every list and
 every `t`. For `2 ≤ t`, `height_ofSortedList_le` gives the height bound of `IsWF.height_le_log`
@@ -163,6 +165,47 @@ theorem ofSortedListM_def (t : ℕ) (visit : m Unit) (l : List (α × β)) :
     ofSortedListM t visit ([] : List (α × β)) = pure .leaf := rfl
 
 end Polymorphic
+
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with cutting a level. -/
+theorem _root_.Cslib.IsMonadHom.map_packM (hf : IsMonadHom m n f) (visit : m Unit)
+    (first : BTree α β) (rest : List (α × β × BTree α β)) (ss : List ℕ) :
+    f (packM visit first rest ss) = packM (f visit) first rest ss := by
+  induction ss generalizing first rest with
+  | nil => simp [packM_nil, hf.map_bind, hf.map_pure]
+  | cons s ss ih =>
+    rw [packM_cons, packM_cons]
+    split <;> simp [hf.map_bind, hf.map_pure, ih]
+
+/-- A monad morphism commutes with the rounds of bulk loading. -/
+theorem _root_.Cslib.IsMonadHom.map_buildM (hf : IsMonadHom m n f) (t : ℕ) (visit : m Unit)
+    (fuel : ℕ) (first : BTree α β) (rest : List (α × β × BTree α β)) :
+    f (buildM t visit fuel first rest) = buildM t (f visit) fuel first rest := by
+  induction fuel generalizing first rest with
+  | zero =>
+    rcases rest with _ | ⟨e, es⟩
+    · simp [hf.map_pure]
+    · rw [buildM_cons, buildM_cons]
+      split <;> simp [hf.map_bind, hf.map_pure]
+  | succ fuel ih =>
+    rcases rest with _ | ⟨e, es⟩
+    · simp [hf.map_pure]
+    · rw [buildM_cons, buildM_cons]
+      split <;> simp [hf.map_bind, hf.map_pure, hf.map_packM, ih]
+
+/-- A monad morphism commutes with bulk loading. -/
+theorem _root_.Cslib.IsMonadHom.map_ofSortedListM (hf : IsMonadHom m n f) (t : ℕ)
+    (visit : m Unit) (l : List (α × β)) :
+    f (ofSortedListM t visit l) = ofSortedListM t (f visit) l :=
+  hf.map_buildM _ visit _ _ _
+
+end Transfer
 
 section Pure
 
@@ -351,10 +394,10 @@ theorem isGrouping_groupSizes {t fuel r : ℕ} (hr : t - 1 ≤ r) (hf : r ≤ fu
     · rw [groupSizes_of_le h]
       exact .last hr h
 
-/-- At minimum degree at least `2`, a grouping has fewer sizes than triples: every group but the
-last takes at least two triples with the one after it, and the last at least one. -/
-theorem IsGrouping.length_lt {t r : ℕ} {ss : List ℕ} (ht : 2 ≤ t) (hg : IsGrouping t r ss) :
-    ss.length < r := by
+/-- At minimum degree at least `2`, a grouping has fewer than half as many sizes as triples: every
+group but the last takes at least one triple and the one after it, and the last at least one. -/
+theorem IsGrouping.two_mul_length_lt {t r : ℕ} {ss : List ℕ} (ht : 2 ≤ t)
+    (hg : IsGrouping t r ss) : 2 * ss.length < r := by
   induction hg with
   | last hr _ => simp only [List.length_nil]; omega
   | cut _ _ _ ih => simp only [List.length_cons]; omega
@@ -442,7 +485,8 @@ private theorem shaped_build {t h fuel : ℕ} {first : BTree α β}
     · rw [build_succ_of_lt hlt]
       have hg := isGrouping_groupSizes (t := t) (fuel := rest.length) (r := rest.length)
         (by omega) le_rfl
-      exact ih (hl.pack hg rfl) (by rw [length_pack hg rfl]; have := hg.length_lt ht; omega)
+      exact ih (hl.pack hg rfl)
+        (by rw [length_pack hg rfl]; have := hg.two_mul_length_lt ht; omega)
     · rcases rest with _ | ⟨e, es⟩
       · simpa using hl.good_first.shaped ht
       · rw [build_of_length_le (List.cons_ne_nil e es) hle]
