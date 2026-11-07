@@ -16,7 +16,8 @@ public import EpsilonEridani.Algorithms.Lean.BTree.MinMax
 find the extreme entry with `minM` or `maxM` from `EpsilonEridani.BTree.MinMax` and erase its key
 with `eraseM` from `EpsilonEridani.BTree.Erase.Basic`, over an arbitrary monad with a comparator
 and a node-visit action. The pure operations `eraseMin?` and `eraseMax?` are the `Id`
-instantiations with `leI` and `visit := pure ()`.
+instantiations with `leI` and `visit := pure ()`. `Cslib.IsMonadHom.map_eraseMinM` and
+`map_eraseMaxM` push a monad morphism through them.
 
 `eraseMin?_eq` and `eraseMax?_eq` are the model equations, on any tree: the first or last entry
 of `toList` together with the erasure of its key. On trees with sorted entries,
@@ -76,6 +77,31 @@ theorem eraseMaxM_def (t : ℕ) (le : α → α → m Bool) (visit : m Unit) (tr
 
 end Polymorphic
 
+section Transfer
+
+open Cslib (IsMonadHom)
+
+variable {α β : Type} {m n : Type → Type*} [Monad m] [Monad n]
+  {f : {γ : Type} → m γ → n γ}
+
+/-- A monad morphism commutes with the removal of the least entry. -/
+theorem _root_.Cslib.IsMonadHom.map_eraseMinM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
+    f (eraseMinM t le visit tr) = eraseMinM t (fun a b => f (le a b)) (f visit) tr := by
+  simp only [eraseMinM_def, hf.map_bind, hf.map_minM]
+  refine bind_congr fun o => ?_
+  cases o <;> simp [hf.map_bind, hf.map_pure, hf.map_eraseM]
+
+/-- A monad morphism commutes with the removal of the greatest entry. -/
+theorem _root_.Cslib.IsMonadHom.map_eraseMaxM (hf : IsMonadHom m n f) (t : ℕ)
+    (le : α → α → m Bool) (visit : m Unit) (tr : BTree α β) :
+    f (eraseMaxM t le visit tr) = eraseMaxM t (fun a b => f (le a b)) (f visit) tr := by
+  simp only [eraseMaxM_def, hf.map_bind, hf.map_maxM]
+  refine bind_congr fun o => ?_
+  cases o <;> simp [hf.map_bind, hf.map_pure, hf.map_eraseM]
+
+end Transfer
+
 section Pure
 
 variable {α β : Type} [LinearOrder α] {t : ℕ} {tr : BTree α β}
@@ -87,6 +113,12 @@ variable {α β : Type} [LinearOrder α] {t : ℕ} {tr : BTree α β}
 /-- Remove and return the greatest entry, pure. -/
 @[expose] def eraseMax? (t : ℕ) (tr : BTree α β) : Option ((α × β) × BTree α β) :=
   Id.run (eraseMaxM t leI (pure ()) tr)
+
+/-- `eraseMin?` is the `Id` instantiation of `eraseMinM`. -/
+theorem eraseMin?_def : eraseMin? t tr = Id.run (eraseMinM t leI (pure ()) tr) := (rfl)
+
+/-- `eraseMax?` is the `Id` instantiation of `eraseMaxM`. -/
+theorem eraseMax?_def : eraseMax? t tr = Id.run (eraseMaxM t leI (pure ()) tr) := (rfl)
 
 /-- `eraseMin?` is the minimum together with the erasure of its key. -/
 theorem eraseMin?_eq_map_min? : eraseMin? t tr = (min? tr).map fun p => (p, erase t p.1 tr) := by
