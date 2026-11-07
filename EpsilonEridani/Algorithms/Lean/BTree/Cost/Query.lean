@@ -50,13 +50,13 @@ def maxT (tr : BTree α β) : TimeM ℕ (Option (α × β)) := maxM (tick 1) tr
 
 /-- The value of `minT` is `min?`. -/
 @[simp] theorem ret_minT : (minT tr).ret = min? tr := by
-  rw [min?_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_minM (tick 1) tr)
+  simpa only [min?_def, minT, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_minM (tick 1) tr)
 
 /-- The value of `maxT` is `max?`. -/
 @[simp] theorem ret_maxT : (maxT tr).ret = max? tr := by
-  rw [max?_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_maxM (tick 1) tr)
+  simpa only [max?_def, maxT, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_maxM (tick 1) tr)
 
 /-- The minimum search visits at most `height` nodes. -/
 theorem time_minT {tr : BTree α β} : (minT tr).time ≤ tr.height := by
@@ -123,28 +123,28 @@ def rankT (k : α) (tr : BTree α β) : TimeM ℕ ℕ := rankM leT (tick 1) k tr
 
 /-- The value of `lookupT` is `lookup`. -/
 @[simp] theorem ret_lookupT (k : α) : (lookupT k tr).ret = lookup k tr := by
-  rw [lookup_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_lookupM leT (tick 1) k tr)
+  simpa only [lookup_def, lookupT, leI, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_lookupM leT (tick 1) k tr)
 
 /-- The value of `containsT` is `contains`. -/
 @[simp] theorem ret_containsT (k : α) : (containsT k tr).ret = contains k tr := by
-  rw [contains_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_containsM leT (tick 1) k tr)
+  simpa only [contains_def, containsT, leI, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_containsM leT (tick 1) k tr)
 
 /-- The value of `predT` is `pred?`. -/
 @[simp] theorem ret_predT (k : α) : (predT k tr).ret = pred? k tr := by
-  rw [pred?_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_predM leT (tick 1) k tr)
+  simpa only [pred?_def, predT, leI, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_predM leT (tick 1) k tr)
 
 /-- The value of `succT` is `succ?`. -/
 @[simp] theorem ret_succT (k : α) : (succT k tr).ret = succ? k tr := by
-  rw [succ?_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_succM leT (tick 1) k tr)
+  simpa only [succ?_def, succT, leI, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_succM leT (tick 1) k tr)
 
 /-- The value of `rankT` is `rank`. -/
 @[simp] theorem ret_rankT (k : α) : (rankT k tr).ret = rank k tr := by
-  rw [rank_def]
-  exact Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_rankM leT (tick 1) k tr)
+  simpa only [rank_def, rankT, leI, Id.run_pure, TimeM.ret_pure, TimeM.ret_tick] using
+    Id.ext_iff.1 (TimeM.isMonadHom_pure_ret.map_rankM leT (tick 1) k tr)
 
 /-! ### Node-visit bounds -/
 
