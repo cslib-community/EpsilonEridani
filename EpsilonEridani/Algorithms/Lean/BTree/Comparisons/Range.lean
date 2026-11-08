@@ -69,6 +69,20 @@ private theorem two_mul_rootKeys_add_le {m : ℕ} (c : BTree α β) (hr : 2 * c.
       rw [Nat.add_sub_cancel, Nat.mul_succ]
       omega
 
+/-- A per-level charge on the first child fits below the root of its node. -/
+private theorem mul_height_le_mul_height_node_sub_one (m : ℕ) (first : BTree α β)
+    (rest : List (α × β × BTree α β)) :
+    m * first.height ≤ m * ((node first rest).height - 1) :=
+  Nat.mul_le_mul_left m (by have := height_first_succ_le (first := first) (rest := rest); omega)
+
+/-- A per-level charge below the root of the node without its first child and separator fits
+below the root of the original node. -/
+private theorem mul_height_node_sub_one_le (m : ℕ) (first : BTree α β) (k : α) (v : β)
+    (c : BTree α β) (rest : List (α × β × BTree α β)) :
+    m * ((node c rest).height - 1) ≤ m * ((node first ((k, v, c) :: rest)).height - 1) :=
+  Nat.mul_le_mul_left m
+    (Nat.sub_le_sub_right (height_node_le_height_node_cons (first := first) (k := k) (v := v)) 1)
+
 variable [LinearOrder α]
 
 /-- Under the order's oracle, `rangeQ` evaluates to `range`. -/
@@ -177,8 +191,7 @@ private theorem countQueries_rangeQ_le_of_forall_le_hi {lo hi : α} {tr : BTree 
     have e := height_first_succ_le (first := first) (rest := [])
     have h₁ := two_mul_rootKeys_add_le first (m := 4 * t - 2)
       (by have := hfirst.rootKeys_le; omega)
-    have h₂ := Nat.mul_le_mul_left (4 * t - 2)
-      (show first.height ≤ (node first []).height - 1 by omega)
+    have h₂ := mul_height_le_mul_height_node_sub_one (4 * t - 2) first []
     rw [countQueries_rangeQ_node_nil, range_node_nil]
     omega
   | .node first ((k, v, c) :: rest) =>
@@ -198,14 +211,12 @@ private theorem countQueries_rangeQ_le_of_forall_le_hi {lo hi : α} {tr : BTree 
           hhi p (mem_toList_node_cons.2 (Or.inr (Or.inr hp)))⟩)
       have h₃ := two_mul_rootKeys_add_le first (m := 4 * t - 2)
         (by have := hfirst.rootKeys_le; omega)
-      have h₄ := Nat.mul_le_mul_left (4 * t - 2)
-        (show first.height ≤ (node first ((k, v, c) :: rest)).height - 1 by omega)
+      have h₄ := mul_height_le_mul_height_node_sub_one (4 * t - 2) first ((k, v, c) :: rest)
       simp only [hk, hlo, ↓reduceIte]
       omega
     · have h₂ := countQueries_rangeQ_le_of_forall_le_hi (lo := lo) hcn hsn
         (fun p hp => hhi p (mem_toList_node_cons.2 (Or.inr (Or.inr hp))))
-      have h₄ := Nat.mul_le_mul_left (4 * t - 2)
-        (show (node c rest).height - 1 ≤ (node first ((k, v, c) :: rest)).height - 1 by omega)
+      have h₄ := mul_height_node_sub_one_le (4 * t - 2) first k v c rest
       simp only [rootKeys_node] at h₂
       simp only [hk, hlo, ↓reduceIte]
       omega
@@ -225,8 +236,7 @@ private theorem countQueries_rangeQ_le_rootKeys {lo hi : α} {tr : BTree α β} 
       (fun c h => hfirst.of_mem_children h) (by simpa using hs)
     have e := height_first_succ_le (first := first) (rest := [])
     have h₁ := two_mul_rootKeys_add_le first (m := 4 * t) (by have := hfirst.rootKeys_le; omega)
-    have h₂ := Nat.mul_le_mul_left (4 * t)
-      (show first.height ≤ (node first []).height - 1 by omega)
+    have h₂ := mul_height_le_mul_height_node_sub_one (4 * t) first []
     rw [countQueries_rangeQ_node_nil, range_node_nil]
     omega
   | .node first ((k, v, c) :: rest) =>
@@ -244,8 +254,7 @@ private theorem countQueries_rangeQ_le_rootKeys {lo hi : α} {tr : BTree α β} 
         (fun p hp => (hlo.trans_lt (hgt p hp)).le)
       have h₃ := two_mul_rootKeys_add_le first (m := 4 * t - 2)
         (by have := hfirst.rootKeys_le; omega)
-      have h₄ := Nat.mul_le_mul_left (4 * t - 2)
-        (show first.height ≤ (node first ((k, v, c) :: rest)).height - 1 by omega)
+      have h₄ := mul_height_le_mul_height_node_sub_one (4 * t - 2) first ((k, v, c) :: rest)
       have h₅ : (4 * t - 2) * ((node first ((k, v, c) :: rest)).height - 1) +
           2 * ((node first ((k, v, c) :: rest)).height - 1) ≤
           4 * t * ((node first ((k, v, c) :: rest)).height - 1) := by
@@ -256,13 +265,11 @@ private theorem countQueries_rangeQ_le_rootKeys {lo hi : α} {tr : BTree α β} 
     · have h₁ := countQueries_rangeQ_le_rootKeys (lo := lo) (hi := hi) ht hcf hsf
       have h₃ := two_mul_rootKeys_add_le first (m := 4 * t)
         (by have := hfirst.rootKeys_le; omega)
-      have h₄ := Nat.mul_le_mul_left (4 * t)
-        (show first.height ≤ (node first ((k, v, c) :: rest)).height - 1 by omega)
+      have h₄ := mul_height_le_mul_height_node_sub_one (4 * t) first ((k, v, c) :: rest)
       simp only [hlo, hhi, ↓reduceIte]
       omega
     · have h₂ := countQueries_rangeQ_le_rootKeys (lo := lo) (hi := hi) ht hcn hsn
-      have h₄ := Nat.mul_le_mul_left (4 * t)
-        (show (node c rest).height - 1 ≤ (node first ((k, v, c) :: rest)).height - 1 by omega)
+      have h₄ := mul_height_node_sub_one_le (4 * t) first k v c rest
       simp only [rootKeys_node] at h₂
       simp only [hlo, hhi, ↓reduceIte]
       omega
@@ -286,14 +293,17 @@ theorem countQueries_rangeQ_of_occupied {tr : BTree α β} (ht : 0 < t)
   have := two_mul_rootKeys_add_le tr (m := 4 * t) (by omega)
   omega
 
-/-- A closed-interval query on a well-formed tree makes at most `2 * t` comparisons per node of
-the node-visit bound `2 * height + k`, where `k` is the number of entries it returns. -/
+/-- A closed-interval query on a well-formed tree makes at most `2 * t * (2 * height + k)`
+comparisons, where `k` is the number of entries it returns: the node-visit bound `2 * height + k`
+of `time_rangeT` times `2 * t`. A single node can cost more than `2 * t` comparisons, so this is
+a consequence of `countQueries_rangeQ_of_occupied`, not a per-node bound. -/
 theorem countQueries_rangeQ_le (h : IsWF t tr) (lo hi : α) :
     (rangeQ lo hi tr).countQueries orderOracle ≤
       2 * t * (2 * tr.height + (range lo hi tr).length) := by
   have := countQueries_rangeQ_of_occupied (lo := lo) (hi := hi) (by have := h.two_le; omega)
     h.rootKeys_le h.occupied_of_mem_children h.sorted
-  have := Nat.mul_le_mul_right (range lo hi tr).length (show 2 ≤ 2 * t by have := h.two_le; omega)
+  have ht : 2 ≤ 2 * t := by have := h.two_le; omega
+  have := Nat.mul_le_mul_right (range lo hi tr).length ht
   calc _ ≤ 4 * t * tr.height + 2 * t * (range lo hi tr).length := by omega
     _ = 2 * t * (2 * tr.height + (range lo hi tr).length) := by grind
 
