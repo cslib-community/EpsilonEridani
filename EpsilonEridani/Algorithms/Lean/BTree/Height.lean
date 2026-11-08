@@ -24,7 +24,9 @@ degree `t`, after Cormen, Leiserson, Rivest and Stein, *Introduction to Algorith
 
 They follow from the corresponding bounds for non-root subtrees, `Occupied.pow_sub_one_le_size`
 and `Occupied.size_le`. These are structural facts about the shape of a tree; they carry no cost
-content.
+content. `le_mul_height_of_scan` is the shape fact behind per-level cost bounds: a count on trees
+that spends at most one more than a node's key count at each node along a descent is at most
+`2 * t * height`.
 -/
 
 public section
@@ -149,6 +151,33 @@ theorem Balanced.height_le_log (ht : 2 ≤ t) (hb : Balanced tr) (hk : tr ≠ .l
     (Nat.le_div_iff_mul_le (by decide)).2 (by omega)
   have := Nat.le_log_of_pow_le (by omega) hle
   omega
+
+/-! ### Counts along a descent -/
+
+/-- A count on trees that spends at most `rest.length + 1` at a node `.node first rest` beyond
+what it spends in one of the node's children, and nothing on the empty tree, is at most
+`2 * t * height`, for positive `t`, on a tree whose root holds at most `2 * t - 1` keys and whose
+children are occupied. -/
+theorem le_mul_height_of_scan (ht : 0 < t) {f : BTree α β → ℕ} (hleaf : f .leaf = 0)
+    (hnode : ∀ (first : BTree α β) (rest : List (α × β × BTree α β)) (B : ℕ),
+      (∀ c ∈ (node first rest).children, f c ≤ B) → f (node first rest) ≤ rest.length + 1 + B)
+    {tr : BTree α β} (hk : tr.rootKeys ≤ 2 * t - 1) (hc : ∀ c ∈ tr.children, Occupied t c) :
+    f tr ≤ 2 * t * tr.height := by
+  induction h : tr.height using Nat.strong_induction_on generalizing tr with
+  | _ n ih =>
+    rcases tr with _ | ⟨first, rest⟩
+    · simp [hleaf]
+    · have hpos := height_succ_le_of_mem_children (tr := node first rest) List.mem_cons_self
+      have hB : ∀ c ∈ (node first rest).children, f c ≤ 2 * t * (n - 1) := fun c hc' => by
+        have hlt := height_succ_le_of_mem_children hc'
+        have ho := hc c hc'
+        exact (ih c.height (by omega) ho.rootKeys_le (fun d hd => ho.of_mem_children hd)
+          rfl).trans (Nat.mul_le_mul_left _ (by omega))
+      have hn : 2 * t * (n - 1) + 2 * t = 2 * t * n := by
+        rw [← Nat.mul_succ]; congr 1; omega
+      have := hnode first rest _ hB
+      rw [rootKeys_node] at hk
+      omega
 
 variable [LinearOrder α]
 

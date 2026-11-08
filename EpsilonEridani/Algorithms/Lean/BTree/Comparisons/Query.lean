@@ -33,9 +33,10 @@ per-node bound of `rest.length + 1` into `2 * t * height` on a tree whose root h
 `2 * t - 1` keys and whose children are occupied, which is every well-formed tree. The
 resulting bounds, `countQueries_lookupQ_le` and its siblings, hold for every oracle, since the
 shape of the tree does not depend on the answers; `lookupQ_upperBound` and its siblings restate
-them as `Cslib.Query.UpperBound` over well-formed inputs, as the roadmap prescribes. The
+them as `Cslib.Query.UpperBound` over well-formed inputs. The
 minimum and maximum make no comparisons at all. `countQueries_slotM_le` bounds the within-node
-linear search by one comparison per key.
+linear search by one comparison per key. The bound is the comparison analysis of B-TREE-SEARCH
+in Cormen, Leiserson, Rivest and Stein, *Introduction to Algorithms*, Section 18.2.
 -/
 
 public section
@@ -44,37 +45,6 @@ open Cslib (FreeM)
 open Cslib.Query (LEQuery UpperBound)
 
 namespace EpsilonEridani.BTree
-
-section Shape
-
-variable {α β : Type} {t : ℕ}
-
-/-- A count on trees that spends at most `rest.length + 1` at a node `.node first rest` beyond
-what it spends in one of the node's children, and nothing on the empty tree, is at most
-`2 * t * height`, for positive `t`, on a tree whose root holds at most `2 * t - 1` keys and whose
-children are occupied. -/
-theorem le_mul_height_of_scan (ht : 0 < t) {f : BTree α β → ℕ} (hleaf : f .leaf = 0)
-    (hnode : ∀ (first : BTree α β) (rest : List (α × β × BTree α β)) (B : ℕ),
-      (∀ c ∈ (node first rest).children, f c ≤ B) → f (node first rest) ≤ rest.length + 1 + B)
-    {tr : BTree α β} (hk : tr.rootKeys ≤ 2 * t - 1) (hc : ∀ c ∈ tr.children, Occupied t c) :
-    f tr ≤ 2 * t * tr.height := by
-  induction h : tr.height using Nat.strong_induction_on generalizing tr with
-  | _ n ih =>
-    rcases tr with _ | ⟨first, rest⟩
-    · simp [hleaf]
-    · have hpos := height_succ_le_of_mem_children (tr := node first rest) List.mem_cons_self
-      have hB : ∀ c ∈ (node first rest).children, f c ≤ 2 * t * (n - 1) := fun c hc' => by
-        have hlt := height_succ_le_of_mem_children hc'
-        have ho := hc c hc'
-        exact (ih c.height (by omega) ho.rootKeys_le (fun d hd => ho.of_mem_children hd)
-          rfl).trans (Nat.mul_le_mul_left _ (by omega))
-      have hn : 2 * t * (n - 1) + 2 * t = 2 * t * n := by
-        rw [← Nat.mul_succ]; congr 1; omega
-      have := hnode first rest _ hB
-      rw [rootKeys_node] at hk
-      omega
-
-end Shape
 
 section Comparisons
 
@@ -255,8 +225,8 @@ theorem countQueries_lookupQ_node_le (k : α) (first : BTree α β)
     by_cases h₃ : oracle (LEQuery.le k k') = true <;>
       by_cases h₄ : oracle (LEQuery.le k' k) = true <;> simp [h₃, h₄] <;> omega
 
-/-- Predecessor search at a node makes at most one comparison per key beyond what it makes in
-the child it descends into. -/
+/-- Predecessor search at a node makes at most one more comparison than the node has keys, beyond
+what it makes in the child it descends into. -/
 theorem countQueries_predQ_node_le (k : α) (first : BTree α β)
     (rest : List (α × β × BTree α β)) {B : ℕ}
     (hB : ∀ c ∈ (node first rest).children, (predQ k c).countQueries oracle ≤ B) :
@@ -274,8 +244,8 @@ theorem countQueries_predQ_node_le (k : α) (first : BTree α β)
     simp [predM_node_cons]
     split_ifs <;> omega
 
-/-- Successor search at a node makes at most one comparison per key beyond what it makes in
-the child it descends into. -/
+/-- Successor search at a node makes at most one more comparison than the node has keys, beyond
+what it makes in the child it descends into. -/
 theorem countQueries_succQ_node_le (k : α) (first : BTree α β)
     (rest : List (α × β × BTree α β)) {B : ℕ}
     (hB : ∀ c ∈ (node first rest).children, (succQ k c).countQueries oracle ≤ B) :
@@ -293,8 +263,8 @@ theorem countQueries_succQ_node_le (k : α) (first : BTree α β)
     simp [succM_node_cons]
     split_ifs <;> omega
 
-/-- Rank at a node makes at most one comparison per key beyond what it makes in the child it
-descends into. -/
+/-- Rank at a node makes at most one more comparison than the node has keys, beyond what it
+makes in the child it descends into. -/
 theorem countQueries_rankQ_node_le (k : α) (first : BTree α β)
     (rest : List (α × β × BTree α β)) {B : ℕ}
     (hB : ∀ c ∈ (node first rest).children, (rankQ k c).countQueries oracle ≤ B) :
@@ -366,6 +336,21 @@ theorem countQueries_rankQ_le (h : IsWF t tr) (k : α) :
 theorem countQueries_lookupQ_le_log (h : IsWF t tr) (k : α) :
     (lookupQ k tr).countQueries oracle ≤ 2 * t * (Nat.log t ((tr.size + 1) / 2) + 1) :=
   (countQueries_lookupQ_le oracle h k).trans (Nat.mul_le_mul_left _ h.height_le_log)
+
+/-- The membership test in a well-formed tree makes logarithmically many comparisons. -/
+theorem countQueries_containsQ_le_log (h : IsWF t tr) (k : α) :
+    (containsQ k tr).countQueries oracle ≤ 2 * t * (Nat.log t ((tr.size + 1) / 2) + 1) :=
+  (countQueries_containsQ_le oracle h k).trans (Nat.mul_le_mul_left _ h.height_le_log)
+
+/-- Predecessor search in a well-formed tree makes logarithmically many comparisons. -/
+theorem countQueries_predQ_le_log (h : IsWF t tr) (k : α) :
+    (predQ k tr).countQueries oracle ≤ 2 * t * (Nat.log t ((tr.size + 1) / 2) + 1) :=
+  (countQueries_predQ_le oracle h k).trans (Nat.mul_le_mul_left _ h.height_le_log)
+
+/-- Successor search in a well-formed tree makes logarithmically many comparisons. -/
+theorem countQueries_succQ_le_log (h : IsWF t tr) (k : α) :
+    (succQ k tr).countQueries oracle ≤ 2 * t * (Nat.log t ((tr.size + 1) / 2) + 1) :=
+  (countQueries_succQ_le oracle h k).trans (Nat.mul_le_mul_left _ h.height_le_log)
 
 /-- Rank in a well-formed tree makes logarithmically many comparisons. -/
 theorem countQueries_rankQ_le_log (h : IsWF t tr) (k : α) :
